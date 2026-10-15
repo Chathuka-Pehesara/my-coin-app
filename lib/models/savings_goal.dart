@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/utils/icon_helper.dart';
 
 class SavingsGoal {
   final String id;
@@ -25,8 +26,7 @@ class SavingsGoal {
         colorValue = colorValue ?? 0xFF0F867C,
         createdAt = createdAt ?? DateTime.now();
 
-  // ignore: non_const_argument_for_const_parameter
-  IconData get icon => IconData(iconCode, fontFamily: 'MaterialIcons');
+  IconData get icon => IconHelper.getIcon(iconCode, Icons.savings_outlined);
   Color get color => Color(colorValue);
 
   double get progressRatio {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/utils/icon_helper.dart';
 
 enum CategoryType {
   income,
@@ -26,8 +27,7 @@ class Category {
     this.monthlyBudget,
   });
 
-  // ignore: non_const_argument_for_const_parameter
-  IconData get icon => IconData(iconCode, fontFamily: 'MaterialIcons');
+  IconData get icon => IconHelper.getIcon(iconCode, Icons.category_outlined);
   Color get color => Color(colorValue);
 
   Category copyWith({

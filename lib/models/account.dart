@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/utils/icon_helper.dart';
 
 enum AccountType {
   cash,
@@ -63,8 +64,7 @@ class Account {
         colorValue = colorValue ?? 0xFFC5A059,
         createdAt = createdAt ?? DateTime.now();
 
-  // ignore: non_const_argument_for_const_parameter
-  IconData get icon => IconData(iconCode, fontFamily: 'MaterialIcons');
+  IconData get icon => IconHelper.getIcon(iconCode, type.defaultIcon);
   Color get color => Color(colorValue);
 
   Account copyWith({

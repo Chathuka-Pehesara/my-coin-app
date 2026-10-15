@@ -7,6 +7,7 @@ import '../../core/utils/date_utils.dart';
 import '../../models/transaction_record.dart';
 import '../../models/category.dart';
 import '../../providers/app_state_provider.dart';
+import '../../widgets/spending_heatmap.dart';
 import 'what_if_simulator_sheet.dart';
 
 enum AnalyticsPeriod {
@@ -255,6 +256,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 ],
               ),
             ),
+            const SizedBox(height: 24),
+
+            // GitHub-Style Spending Intensity Heatmap
+            const SpendingHeatmapCard(),
             const SizedBox(height: 24),
 
             // Bar Chart: Cash Flow Comparison (Income vs Expense)

@@ -8,6 +8,7 @@ import '../../widgets/empty_state_view.dart';
 import 'add_budget_dialog.dart';
 import 'add_goal_dialog.dart';
 import 'goal_contribution_dialog.dart';
+import '../../widgets/coin_drop_modal.dart';
 
 class BudgetsAndGoalsScreen extends StatelessWidget {
   const BudgetsAndGoalsScreen({super.key});
@@ -410,19 +411,41 @@ class _SavingsGoalsTabView extends StatelessWidget {
                     Row(
                       children: [
                         Expanded(
-                          child: OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 8)),
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.goldDark,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              elevation: 1,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
                             onPressed: () {
-                              showDialog(
+                              showModalBottomSheet(
                                 context: context,
-                                builder: (_) => GoalContributionDialog(goal: g, isDeposit: true),
+                                isScrollControlled: true,
+                                backgroundColor: Colors.transparent,
+                                builder: (_) => CoinDropModal(goal: g),
                               );
                             },
-                            icon: const Icon(Icons.add, size: 16),
-                            label: const Text('Add Funds', style: TextStyle(fontSize: 12)),
+                            icon: const Icon(Icons.toll_rounded, size: 15, color: Colors.white),
+                            label: const Text('Drop Coins ✨', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                           ),
                         ),
                         const SizedBox(width: 8),
+                        OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          onPressed: () {
+                            showDialog(
+                              context: context,
+                              builder: (_) => GoalContributionDialog(goal: g, isDeposit: true),
+                            );
+                          },
+                          child: const Text('Add', style: TextStyle(fontSize: 12)),
+                        ),
+                        const SizedBox(width: 4),
                         IconButton(
                           icon: Icon(Icons.remove_circle_outline, size: 20, color: AppColors.textTertiary),
                           tooltip: 'Withdraw Funds',

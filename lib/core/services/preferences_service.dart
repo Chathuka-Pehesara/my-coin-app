@@ -8,6 +8,7 @@ class PreferencesService {
   static const String _keyBiometricEnabled = 'pref_biometric_enabled';
   static const String _keyOnboardingCompleted = 'pref_onboarding_completed';
   static const String _keyThemeMode = 'pref_theme_mode';
+  static const String _keyShakeToHideEnabled = 'pref_shake_to_hide_enabled';
 
   final SharedPreferences _prefs;
 
@@ -61,6 +62,12 @@ class PreferencesService {
   String get themeMode => _prefs.getString(_keyThemeMode) ?? 'light';
   Future<void> setThemeMode(String mode) async {
     await _prefs.setString(_keyThemeMode, mode);
+  }
+
+  // Shake to hide balance
+  bool get isShakeToHideEnabled => _prefs.getBool(_keyShakeToHideEnabled) ?? true;
+  Future<void> setShakeToHideEnabled(bool enabled) async {
+    await _prefs.setBool(_keyShakeToHideEnabled, enabled);
   }
 
   // Clear all

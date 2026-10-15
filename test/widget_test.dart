@@ -5,8 +5,11 @@ import 'package:my_trans_actions/models/transaction_record.dart';
 import 'package:my_trans_actions/models/category.dart';
 import 'package:my_trans_actions/models/budget.dart';
 import 'package:my_trans_actions/models/savings_goal.dart';
+import 'package:my_trans_actions/core/services/shake_detector_service.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('CurrencyFormatter Tests', () {
     test('Formats LKR properly by default', () {
       final formatted = CurrencyFormatter.format(15000.0, currencyCode: 'LKR');
@@ -155,6 +158,24 @@ void main() {
 
       expect(goal.progressRatio, equals(0.4));
       expect(goal.remainingAmount, equals(60000.0));
+    });
+  });
+
+  group('ShakeDetectorService Tests', () {
+    test('Invokes registered shake callback on simulated shake', () {
+      final detector = ShakeDetectorService.instance;
+      bool shakeDetected = false;
+
+      detector.startListening(
+        onShake: () {
+          shakeDetected = true;
+        },
+      );
+
+      detector.simulateShake();
+      expect(shakeDetected, isTrue);
+
+      detector.stopListening();
     });
   });
 }

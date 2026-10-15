@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/account.dart';
 import '../models/category.dart';
 import '../models/transaction_record.dart';
@@ -9,6 +10,7 @@ import '../models/insight_item.dart';
 import '../core/services/database_service.dart';
 import '../core/services/preferences_service.dart';
 import '../core/services/financial_engine.dart';
+import '../core/services/shake_detector_service.dart';
 
 enum TransactionSortOption {
   newest,
@@ -37,6 +39,7 @@ class AppStateProvider extends ChangeNotifier {
   bool _isLoading = true;
   String _currencyCode = 'LKR';
   bool _isBalanceMasked = false;
+  bool _isShakeToHideEnabled = true;
 
   List<Account> _accounts = [];
   List<Category> _categories = [];
@@ -58,6 +61,8 @@ class AppStateProvider extends ChangeNotifier {
   AppStateProvider(this._prefs) {
     _currencyCode = _prefs.currencyCode;
     _isBalanceMasked = _prefs.isBalanceMasked;
+    _isShakeToHideEnabled = _prefs.isShakeToHideEnabled;
+    _initShakeDetection();
     loadAllData();
   }
 
@@ -65,6 +70,7 @@ class AppStateProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String get currencyCode => _currencyCode;
   bool get isBalanceMasked => _isBalanceMasked;
+  bool get isShakeToHideEnabled => _isShakeToHideEnabled;
 
   List<Account> get accounts => List.unmodifiable(_accounts);
   List<Category> get categories => List.unmodifiable(_categories);
@@ -224,6 +230,32 @@ class AppStateProvider extends ChangeNotifier {
   }
 
   // ================= PREFERENCES =================
+  void _initShakeDetection() {
+    if (_isShakeToHideEnabled) {
+      ShakeDetectorService.instance.startListening(
+        onShake: () {
+          triggerShakePrivacyToggle();
+        },
+      );
+    } else {
+      ShakeDetectorService.instance.stopListening();
+    }
+  }
+
+  Future<void> setShakeToHideEnabled(bool enabled) async {
+    _isShakeToHideEnabled = enabled;
+    await _prefs.setShakeToHideEnabled(enabled);
+    _initShakeDetection();
+    notifyListeners();
+  }
+
+  Future<void> triggerShakePrivacyToggle() async {
+    try {
+      HapticFeedback.heavyImpact();
+    } catch (_) {}
+    await toggleBalanceMasking();
+  }
+
   Future<void> toggleBalanceMasking() async {
     _isBalanceMasked = !_isBalanceMasked;
     await _prefs.setBalanceMasked(_isBalanceMasked);

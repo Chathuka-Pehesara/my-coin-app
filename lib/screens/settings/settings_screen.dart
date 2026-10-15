@@ -283,6 +283,75 @@ class SettingsScreen extends StatelessWidget {
                       onChanged: (val) => authProv.setBiometrics(val),
                     ),
                   ],
+                  _buildDivider(isDark),
+                  SwitchListTile(
+                    secondary: const Icon(Icons.vibration_rounded, color: AppColors.goldDark),
+                    title: const Text('Shake to Hide Balances', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                    subtitle: const Text('Shake device to instantly mask or reveal numbers', style: TextStyle(fontSize: 12)),
+                    value: state.isShakeToHideEnabled,
+                    activeThumbColor: AppColors.goldPrimary,
+                    onChanged: (val) => state.setShakeToHideEnabled(val),
+                  ),
+                  if (state.isShakeToHideEnabled) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(left: 60, right: 16, bottom: 12),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Test without shaking hardware:',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                              ),
+                            ),
+                          ),
+                          TextButton.icon(
+                            style: TextButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            ),
+                            icon: Icon(
+                              state.isBalanceMasked ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                              size: 14,
+                              color: AppColors.goldDark,
+                            ),
+                            label: Text(
+                              state.isBalanceMasked ? 'Simulate Reveal' : 'Simulate Shake',
+                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.goldDark),
+                            ),
+                            onPressed: () {
+                              state.triggerShakePrivacyToggle();
+                              ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  duration: const Duration(milliseconds: 1400),
+                                  behavior: SnackBarBehavior.floating,
+                                  backgroundColor: AppColors.darkBackground,
+                                  content: Row(
+                                    children: [
+                                      Icon(
+                                        state.isBalanceMasked ? Icons.visibility_outlined : Icons.shield_outlined,
+                                        color: AppColors.goldPrimary,
+                                        size: 18,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Text(
+                                        state.isBalanceMasked
+                                            ? 'Balances Revealed'
+                                            : 'Privacy Shield Activated (Balances Masked)',
+                                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

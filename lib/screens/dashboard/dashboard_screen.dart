@@ -7,6 +7,7 @@ import '../../providers/app_state_provider.dart';
 import '../../widgets/coin_avatar.dart';
 import '../../widgets/balance_card.dart';
 import '../../widgets/transaction_tile.dart';
+import '../../widgets/spending_heatmap.dart';
 import '../transactions/add_edit_transaction_screen.dart';
 import '../transactions/transaction_detail_screen.dart';
 import '../settings/settings_screen.dart';
@@ -240,6 +241,10 @@ class DashboardScreen extends StatelessWidget {
               ),
               const SizedBox(height: 22),
             ],
+
+            // GitHub-Style Spending Intensity Heatmap
+            const SpendingHeatmapCard(),
+            const SizedBox(height: 22),
 
             // Monthly Budget Pacing Banner
             if (overallBudget != null) ...[

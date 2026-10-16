@@ -164,6 +164,7 @@ void main() {
   group('ShakeDetectorService Tests', () {
     test('Invokes registered shake callback on simulated shake', () {
       final detector = ShakeDetectorService.instance;
+      detector.accelerometerStreamOverride = const Stream.empty();
       bool shakeDetected = false;
 
       detector.startListening(

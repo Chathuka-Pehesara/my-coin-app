@@ -67,10 +67,24 @@ class TransactionTile extends StatelessWidget {
       isMasked: isMasked,
     );
 
+    IconData flowIcon;
+    Color flowBadgeBg;
+    if (transaction.type == TransactionType.income) {
+      flowIcon = Icons.north_east_rounded;
+      flowBadgeBg = AppColors.incomeGreen;
+    } else if (transaction.type == TransactionType.expense) {
+      flowIcon = Icons.south_west_rounded;
+      flowBadgeBg = AppColors.expenseCoral;
+    } else {
+      flowIcon = Icons.swap_horiz_rounded;
+      flowBadgeBg = AppColors.transferBlue;
+    }
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: isDark ? AppColors.darkSurface : Colors.white,
@@ -79,28 +93,69 @@ class TransactionTile extends StatelessWidget {
             color: isDark ? AppColors.darkBorder : AppColors.cardBorder,
             width: 1,
           ),
+          boxShadow: [
+            BoxShadow(
+              color: amountColor.withValues(alpha: isDark ? 0.05 : 0.03),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Row(
           children: [
-            // Category Icon Badge
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: catColor.withAlpha(28),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: catColor.withAlpha(50),
-                  width: 1,
+            // Category Icon Badge with Directional Micro-Flow Indicator
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: catColor.withValues(alpha: isDark ? 0.22 : 0.12),
+                    borderRadius: BorderRadius.circular(13),
+                    border: Border.all(
+                      color: catColor.withValues(alpha: 0.35),
+                      width: 1.2,
+                    ),
+                  ),
+                  child: Icon(
+                    catIcon,
+                    size: 22,
+                    color: catColor,
+                  ),
                 ),
-              ),
-              child: Icon(
-                catIcon,
-                size: 22,
-                color: catColor,
-              ),
+                Positioned(
+                  right: -3,
+                  bottom: -3,
+                  child: Container(
+                    width: 18,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: flowBadgeBg,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isDark ? AppColors.darkSurface : Colors.white,
+                        width: 1.8,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: flowBadgeBg.withValues(alpha: 0.4),
+                          blurRadius: 4,
+                        ),
+                      ],
+                    ),
+                    child: Center(
+                      child: Icon(
+                        flowIcon,
+                        size: 10,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 14),
 
             // Title & Details
             Expanded(

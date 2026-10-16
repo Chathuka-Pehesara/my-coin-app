@@ -6,6 +6,7 @@ import '../../core/utils/currency_formatter.dart';
 import '../../models/transaction_record.dart';
 import '../../models/category.dart';
 import '../../providers/app_state_provider.dart';
+import '../../widgets/coin_character_dialog.dart';
 
 class AddEditTransactionScreen extends StatefulWidget {
   final TransactionRecord? transactionToEdit;
@@ -89,7 +90,7 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
     }
   }
 
-  void _save() {
+  Future<void> _save() async {
     final amountText = _amountController.text.trim();
     final amount = double.tryParse(amountText);
     if (amount == null || amount <= 0) {
@@ -128,8 +129,9 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
       _selectedTime.minute,
     );
 
+    TransactionRecord savedTx;
     if (widget.transactionToEdit != null) {
-      final updated = widget.transactionToEdit!.copyWith(
+      savedTx = widget.transactionToEdit!.copyWith(
         title: title,
         amount: amount,
         type: _selectedType,
@@ -140,9 +142,9 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
         merchant: _merchantController.text.trim().isEmpty ? null : _merchantController.text.trim(),
         note: _noteController.text.trim().isEmpty ? null : _noteController.text.trim(),
       );
-      state.updateTransaction(updated, widget.transactionToEdit!);
+      await state.updateTransaction(savedTx, widget.transactionToEdit!);
     } else {
-      final newTx = TransactionRecord(
+      savedTx = TransactionRecord(
         id: 'tx_${DateTime.now().millisecondsSinceEpoch}',
         title: title,
         amount: amount,
@@ -155,10 +157,20 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
         note: _noteController.text.trim().isEmpty ? null : _noteController.text.trim(),
         createdAt: DateTime.now(),
       );
-      state.addTransaction(newTx);
+      await state.addTransaction(savedTx);
     }
 
-    Navigator.of(context).pop();
+    if (mounted) {
+      await CoinCharacterReactionModal.show(
+        context,
+        transaction: savedTx,
+        currencyCode: state.currencyCode,
+        isMasked: state.isBalanceMasked,
+      );
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    }
   }
 
   @override

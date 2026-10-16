@@ -23,6 +23,8 @@ class ShakeDetectorService {
   bool _isListening = false;
   bool get isListening => _isListening;
 
+  Stream<UserAccelerometerEvent>? accelerometerStreamOverride;
+
   /// Starts listening for shake motions
   void startListening({required VoidCallback onShake}) {
     if (_isListening) {
@@ -34,7 +36,8 @@ class ShakeDetectorService {
     _isListening = true;
 
     try {
-      _subscription = userAccelerometerEventStream().listen(
+      final stream = accelerometerStreamOverride ?? userAccelerometerEventStream();
+      _subscription = stream.listen(
         _handleAccelerometerEvent,
         onError: (error) {
           debugPrint('ShakeDetectorService sensor error (gracefully handled): $error');

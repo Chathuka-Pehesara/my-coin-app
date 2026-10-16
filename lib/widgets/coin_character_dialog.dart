@@ -6,7 +6,7 @@ import '../core/theme/app_colors.dart';
 import '../core/utils/currency_formatter.dart';
 import '../models/transaction_record.dart';
 
-/// Interactive Animated Coin Mascot ("Coiny") acting emotionally based on transaction type
+/// Interactive Animated Coin Mascot ("Coiny") with 3D touch physics, coin flip, and particle effects
 class CoinCharacterReactionModal extends StatefulWidget {
   final TransactionRecord transaction;
   final String currencyCode;
@@ -44,28 +44,55 @@ class CoinCharacterReactionModal extends StatefulWidget {
 }
 
 class _CoinCharacterReactionModalState extends State<CoinCharacterReactionModal>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _animController;
+    with TickerProviderStateMixin {
+  // Continuous idle breathing & bouncing controller
+  late AnimationController _idleController;
+
+  // 3D Coin Flip controller
+  late AnimationController _flipController;
+
+  // Elastic drag offset
+  Offset _dragOffset = Offset.zero;
+
+  // Continuous particle simulator
+  final List<_MascotParticle> _particles = [];
+  Timer? _particleTimer;
+  final Random _random = Random();
+
   Timer? _autoDismissTimer;
   double _dismissProgress = 1.0;
   Timer? _progressTimer;
   int _pokeCount = 0;
-
-  final Random _random = Random();
   late String _mascotSpeech;
 
   @override
   void initState() {
     super.initState();
-    _animController = AnimationController(
+
+    _idleController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1400),
+      duration: const Duration(milliseconds: 1600),
     )..repeat(reverse: true);
+
+    _flipController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 650),
+    );
 
     _mascotSpeech = _getRandomPhrase(widget.transaction.type);
 
-    // Auto-dismiss countdown (2.8 seconds total)
-    const totalMs = 2800;
+    // Initial burst of particles
+    _spawnParticles(count: 24);
+
+    // Continuous particle generation at 30fps
+    _particleTimer = Timer.periodic(const Duration(milliseconds: 60), (_) {
+      if (mounted) {
+        _updateParticles();
+      }
+    });
+
+    // Auto-dismiss countdown (3.8 seconds total so user can play with Coiny)
+    const totalMs = 3800;
     const intervalMs = 50;
     int elapsed = 0;
 
@@ -86,70 +113,122 @@ class _CoinCharacterReactionModalState extends State<CoinCharacterReactionModal>
     });
 
     try {
-      if (widget.transaction.type == TransactionType.income) {
-        HapticFeedback.lightImpact();
-      } else if (widget.transaction.type == TransactionType.expense) {
-        HapticFeedback.mediumImpact();
-      } else {
-        HapticFeedback.selectionClick();
-      }
+      HapticFeedback.mediumImpact();
     } catch (_) {}
   }
 
   @override
   void dispose() {
-    _animController.dispose();
+    _idleController.dispose();
+    _flipController.dispose();
+    _particleTimer?.cancel();
     _autoDismissTimer?.cancel();
     _progressTimer?.cancel();
     super.dispose();
   }
 
-  String _getRandomPhrase(TransactionType type) {
-    if (type == TransactionType.income) {
-      final phrases = [
-        'Cha-ching! Money in the bank! 🤑✨',
-        'Stacking up! We are getting wealthier! 🚀',
-        'Incoming treasure secured! Keep it flowing! 💰',
-        'Look at that balance grow! Top tier energy! 👑',
-      ];
-      return phrases[_random.nextInt(phrases.length)];
-    } else if (type == TransactionType.expense) {
-      final phrases = [
-        'Ouch! My little gold chest felt that! 💸🥺',
-        'Money spent! Please tell me it was worth it! 📉',
-        'Goodbye little coin friends... spend wisely! 🙈',
-        'A necessary expense, or a dangerous craving? 🧐',
-      ];
-      return phrases[_random.nextInt(phrases.length)];
-    } else {
-      final phrases = [
-        'Smooth tactical repositioning! 🔄🏦',
-        'Funds transferred across vaults safely! 😎',
-        'Smart liquidity routing! Looking sharp! ⚡',
-      ];
-      return phrases[_random.nextInt(phrases.length)];
+  void _spawnParticles({int count = 10}) {
+    final type = widget.transaction.type;
+    for (int i = 0; i < count; i++) {
+      final angle = _random.nextDouble() * 2 * pi;
+      final speed = 30.0 + _random.nextDouble() * 120.0;
+
+      Color pColor;
+      if (type == TransactionType.income) {
+        pColor = i.isEven ? AppColors.goldPrimary : AppColors.goldLight;
+      } else if (type == TransactionType.expense) {
+        pColor = const Color(0xFF4FC3F7);
+      } else {
+        pColor = i.isEven ? AppColors.transferBlue : AppColors.goldLight;
+      }
+
+      _particles.add(
+        _MascotParticle(
+          x: 0,
+          y: 0,
+          vx: cos(angle) * speed,
+          vy: sin(angle) * speed - (type == TransactionType.income ? 60 : 0),
+          color: pColor,
+          size: 3.5 + _random.nextDouble() * 5.0,
+          rotation: _random.nextDouble() * 2 * pi,
+          rotationSpeed: (_random.nextDouble() - 0.5) * 8.0,
+          maxLife: 0.8 + _random.nextDouble() * 0.8,
+        ),
+      );
     }
   }
 
-  void _onPokeMascot() {
+  void _updateParticles() {
+    setState(() {
+      for (int i = _particles.length - 1; i >= 0; i--) {
+        final p = _particles[i];
+        p.age += 0.06;
+        p.x += p.vx * 0.06;
+        p.y += p.vy * 0.06;
+        p.rotation += p.rotationSpeed * 0.06;
+
+        // Gravity
+        if (widget.transaction.type == TransactionType.income) {
+          p.vy += 80 * 0.06;
+        } else if (widget.transaction.type == TransactionType.expense) {
+          p.vy += 120 * 0.06;
+        }
+
+        if (p.age >= p.maxLife) {
+          _particles.removeAt(i);
+        }
+      }
+
+      // Keep spawning continuous flow
+      if (_particles.length < 20) {
+        _spawnParticles(count: 3);
+      }
+    });
+  }
+
+  void _onPokeCoiny() {
     try {
       HapticFeedback.heavyImpact();
     } catch (_) {}
 
+    _flipController.forward(from: 0.0);
+    _spawnParticles(count: 16);
+
     setState(() {
       _pokeCount++;
       if (widget.transaction.type == TransactionType.income) {
-        _mascotSpeech = _pokeCount.isEven
-            ? 'Wheee! Coin rain! 🌟🪙'
-            : 'More gold! More power! 👑';
+        final phrases = [
+          'Wheee! Coin shower! 🌟🪙',
+          'Stacking up the gold! 👑',
+          'You clicked me! More wealth incoming! 🚀',
+        ];
+        _mascotSpeech = phrases[_pokeCount % phrases.length];
       } else if (widget.transaction.type == TransactionType.expense) {
-        _mascotSpeech = _pokeCount.isEven
-            ? 'Don\'t poke me, save your coins! 🥺'
-            : 'I\'m shedding gold tears here! 😭💸';
+        final phrases = [
+          'Oof! Don\'t poke, I\'m mourning the budget! 🥺',
+          'Shedding little gold tears! 😭💸',
+          'Watch the wallet! Protect the vault! 🛡️',
+        ];
+        _mascotSpeech = phrases[_pokeCount % phrases.length];
       } else {
-        _mascotSpeech = 'Vault swap complete! 🕶️✨';
+        final phrases = [
+          'Vault swap confirmed! 🕶️⚡',
+          'Hyperdrive transfer complete! 🌀',
+          'Smooth positioning! 😎',
+        ];
+        _mascotSpeech = phrases[_pokeCount % phrases.length];
       }
     });
+  }
+
+  String _getRandomPhrase(TransactionType type) {
+    if (type == TransactionType.income) {
+      return 'Cha-ching! Inflow secured! We\'re growing! 🤑✨';
+    } else if (type == TransactionType.expense) {
+      return 'Ouch! Expense logged. Spend mindfully! 💸🥺';
+    } else {
+      return 'Smooth tactical relocation between vaults! 🔄🏦';
+    }
   }
 
   @override
@@ -164,15 +243,15 @@ class _CoinCharacterReactionModalState extends State<CoinCharacterReactionModal>
 
     if (type == TransactionType.income) {
       accentColor = AppColors.incomeGreen;
-      typeLabel = 'Income Added';
-      typeIcon = Icons.arrow_downward_rounded;
+      typeLabel = 'Income Received';
+      typeIcon = Icons.north_east_rounded;
     } else if (type == TransactionType.expense) {
       accentColor = AppColors.expenseCoral;
-      typeLabel = 'Expense Logged';
-      typeIcon = Icons.arrow_upward_rounded;
+      typeLabel = 'Expense Paid';
+      typeIcon = Icons.south_west_rounded;
     } else {
       accentColor = AppColors.transferBlue;
-      typeLabel = 'Transfer Recorded';
+      typeLabel = 'Transfer Relocated';
       typeIcon = Icons.swap_horiz_rounded;
     }
 
@@ -188,13 +267,13 @@ class _CoinCharacterReactionModalState extends State<CoinCharacterReactionModal>
         borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
-            blurRadius: 20,
-            offset: const Offset(0, -4),
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 24,
+            offset: const Offset(0, -6),
           ),
         ],
       ),
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -203,74 +282,137 @@ class _CoinCharacterReactionModalState extends State<CoinCharacterReactionModal>
             borderRadius: BorderRadius.circular(2),
             child: LinearProgressIndicator(
               value: _dismissProgress,
-              minHeight: 3,
+              minHeight: 3.5,
               backgroundColor: isDark ? AppColors.darkSurfaceElevated : AppColors.surfaceElevated,
               valueColor: AlwaysStoppedAnimation<Color>(accentColor),
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
 
           // Speech Bubble
-          Container(
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
               color: isDark ? AppColors.darkSurface : AppColors.surfaceElevated,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: accentColor.withValues(alpha: 0.4),
+                color: accentColor.withValues(alpha: 0.5),
                 width: 1.2,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: accentColor.withValues(alpha: 0.12),
+                  color: accentColor.withValues(alpha: 0.15),
                   blurRadius: 10,
                   offset: const Offset(0, 3),
                 ),
               ],
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
+            child: Text(
+              _mascotSpeech,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // Interactive 3D Physics Character Area
+          SizedBox(
+            height: 170,
+            width: double.infinity,
+            child: Stack(
+              alignment: Alignment.center,
               children: [
-                Flexible(
-                  child: Text(
-                    _mascotSpeech,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                // Live Particle Layer
+                CustomPaint(
+                  size: const Size(220, 170),
+                  painter: _ParticleCanvasPainter(particles: _particles),
+                ),
+
+                // Interactive Draggable / Flippable Coin Character
+                GestureDetector(
+                  onTap: _onPokeCoiny,
+                  onPanUpdate: (details) {
+                    setState(() {
+                      _dragOffset += details.delta * 0.6;
+                    });
+                  },
+                  onPanEnd: (_) {
+                    setState(() {
+                      _dragOffset = Offset.zero;
+                    });
+                    try {
+                      HapticFeedback.selectionClick();
+                    } catch (_) {}
+                  },
+                  child: AnimatedBuilder(
+                    animation: Listenable.merge([_idleController, _flipController]),
+                    builder: (context, _) {
+                      // Elastic spring bounce when returning from drag
+                      final idleBounce = sin(_idleController.value * pi) * 6.0;
+                      final flipVal = _flipController.value;
+
+                      return Transform.translate(
+                        offset: Offset(_dragOffset.dx, _dragOffset.dy - idleBounce),
+                        child: Transform(
+                          alignment: Alignment.center,
+                          transform: Matrix4.identity()
+                            ..setEntry(3, 2, 0.002) // 3D Perspective
+                            ..rotateY(flipVal * 2 * pi) // Full 360 flip on poke
+                            ..rotateZ((_dragOffset.dx * 0.008).clamp(-0.25, 0.25)),
+                          child: SizedBox(
+                            width: 120,
+                            height: 120,
+                            child: CustomPaint(
+                              painter: _LivingCoinPainter(
+                                idleProgress: _idleController.value,
+                                type: type,
+                                isDark: isDark,
+                                isFlipped: flipVal > 0.25 && flipVal < 0.75,
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+
+                // Tap & Drag hint badge
+                Positioned(
+                  bottom: 2,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.darkSurfaceElevated : Colors.white.withValues(alpha: 0.9),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isDark ? AppColors.darkBorder : AppColors.cardBorder,
+                      ),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.touch_app_rounded, size: 12, color: AppColors.goldDark),
+                        SizedBox(width: 4),
+                        Text(
+                          'Tap or drag Coiny to interact',
+                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.goldDark),
+                        ),
+                      ],
                     ),
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 14),
-
-          // Live Animated Mascot Character
-          GestureDetector(
-            onTap: _onPokeMascot,
-            child: AnimatedBuilder(
-              animation: _animController,
-              builder: (context, _) {
-                return SizedBox(
-                  width: 140,
-                  height: 140,
-                  child: CustomPaint(
-                    painter: _CoinMascotPainter(
-                      progress: _animController.value,
-                      type: type,
-                      isDark: isDark,
-                      pokeOffset: _pokeCount % 2 == 1,
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
           const SizedBox(height: 12),
 
-          // Transaction Summary Pill
+          // Transaction Pill
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
@@ -286,10 +428,10 @@ class _CoinCharacterReactionModalState extends State<CoinCharacterReactionModal>
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(6),
+                      padding: const EdgeInsets.all(7),
                       decoration: BoxDecoration(
                         color: accentColor.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(9),
                       ),
                       child: Icon(typeIcon, size: 16, color: accentColor),
                     ),
@@ -299,7 +441,7 @@ class _CoinCharacterReactionModalState extends State<CoinCharacterReactionModal>
                       children: [
                         Text(
                           widget.transaction.title,
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -327,23 +469,41 @@ class _CoinCharacterReactionModalState extends State<CoinCharacterReactionModal>
           ),
           const SizedBox(height: 16),
 
-          // Confirm / Got it button
-          SizedBox(
-            width: double.infinity,
-            height: 46,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.goldDark,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                elevation: 1,
+          // Interactive Action Buttons
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 11),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  onPressed: _onPokeCoiny,
+                  icon: const Icon(Icons.celebration_rounded, size: 16),
+                  label: Text(
+                    type == TransactionType.income ? 'Make It Rain 🪙' : 'Cheer Up 🌟',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                ),
               ),
-              onPressed: () {
-                Navigator.of(context).pop();
-                widget.onDismissed?.call();
-              },
-              child: const Text('Got It! ✨', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-            ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.goldDark,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 11),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    elevation: 1,
+                  ),
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    widget.onDismissed?.call();
+                  },
+                  child: const Text('Awesome! ✨', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -351,135 +511,290 @@ class _CoinCharacterReactionModalState extends State<CoinCharacterReactionModal>
   }
 }
 
-/// Vector CustomPainter that animates the live coin character and facial expressions
-class _CoinMascotPainter extends CustomPainter {
-  final double progress;
+class _MascotParticle {
+  double x;
+  double y;
+  double vx;
+  double vy;
+  Color color;
+  double size;
+  double rotation;
+  double rotationSpeed;
+  double age = 0.0;
+  double maxLife;
+
+  _MascotParticle({
+    required this.x,
+    required this.y,
+    required this.vx,
+    required this.vy,
+    required this.color,
+    required this.size,
+    required this.rotation,
+    required this.rotationSpeed,
+    required this.maxLife,
+  });
+}
+
+class _ParticleCanvasPainter extends CustomPainter {
+  final List<_MascotParticle> particles;
+
+  _ParticleCanvasPainter({required this.particles});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cx = size.width / 2;
+    final cy = size.height / 2;
+
+    for (final p in particles) {
+      final alpha = (1.0 - (p.age / p.maxLife)).clamp(0.0, 1.0);
+      final paint = Paint()
+        ..color = p.color.withValues(alpha: alpha)
+        ..style = PaintingStyle.fill;
+
+      canvas.save();
+      canvas.translate(cx + p.x, cy + p.y);
+      canvas.rotate(p.rotation);
+
+      // Render as miniature gold coin or star
+      final r = Rect.fromCenter(center: Offset.zero, width: p.size, height: p.size * 0.7);
+      canvas.drawOval(r, paint);
+      canvas.drawOval(
+        r,
+        Paint()
+          ..color = Colors.white.withValues(alpha: alpha * 0.7)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.8,
+      );
+
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ParticleCanvasPainter oldDelegate) => true;
+}
+
+class _LivingCoinPainter extends CustomPainter {
+  final double idleProgress;
   final TransactionType type;
   final bool isDark;
-  final bool pokeOffset;
+  final bool isFlipped;
 
-  _CoinMascotPainter({
-    required this.progress,
+  _LivingCoinPainter({
+    required this.idleProgress,
     required this.type,
     required this.isDark,
-    required this.pokeOffset,
+    required this.isFlipped,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     final double cx = size.width / 2;
-    // Bouncing squash and stretch motion
-    final double bounceY = (type == TransactionType.income)
-        ? -8.0 * sin(progress * pi)
-        : (type == TransactionType.expense)
-            ? 3.0 * sin(progress * 4 * pi) // trembling
-            : 0.0;
+    final double cy = size.height / 2;
+    final double radius = 46.0;
+    final center = Offset(cx, cy);
 
-    final double cy = (size.height / 2) + bounceY;
-    final double radius = 48.0;
-
-    // 1. Particle Effects Behind Coin
-    if (type == TransactionType.income) {
-      _drawCelebrationConfetti(canvas, cx, cy);
-    } else if (type == TransactionType.expense) {
-      _drawTeardropsAndSweat(canvas, cx, cy);
-    } else {
-      _drawPortalRings(canvas, cx, cy);
-    }
-
-    // 2. 3D Bevelled Metallic Coin Base
-    final coinCenter = Offset(cx, cy);
-
-    // Drop shadow
+    // 1. Drop Shadow
     canvas.drawCircle(
-      coinCenter.translate(0, 8),
+      center.translate(0, 6),
       radius,
       Paint()
         ..color = Colors.black.withValues(alpha: 0.25)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
     );
 
-    // Outer Rim Gradient
+    // 2. Bevelled 3D Champagne Gold Coin Body
     final rimPaint = Paint()
       ..shader = const RadialGradient(
-        center: Alignment(-0.3, -0.4),
+        center: Alignment(-0.25, -0.35),
         colors: [
           AppColors.goldLight,
           AppColors.goldPrimary,
           AppColors.goldDark,
         ],
-      ).createShader(Rect.fromCircle(center: coinCenter, radius: radius));
+      ).createShader(Rect.fromCircle(center: center, radius: radius));
 
-    canvas.drawCircle(coinCenter, radius, rimPaint);
+    canvas.drawCircle(center, radius, rimPaint);
 
-    // Inner Coin Face
     final facePaint = Paint()
       ..shader = const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
-          Color(0xFFFFF2C2),
+          Color(0xFFFFF4CE),
           AppColors.goldLight,
           AppColors.goldPrimary,
         ],
-      ).createShader(Rect.fromCircle(center: coinCenter, radius: radius - 6));
+      ).createShader(Rect.fromCircle(center: center, radius: radius - 5));
 
-    canvas.drawCircle(coinCenter, radius - 6, facePaint);
+    canvas.drawCircle(center, radius - 5, facePaint);
 
-    // Inner Rim Stamping line
-    final stampPaint = Paint()
-      ..color = AppColors.goldDark.withValues(alpha: 0.5)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2;
-    canvas.drawCircle(coinCenter, radius - 7, stampPaint);
+    // Stamping inner rim ring
+    canvas.drawCircle(
+      center,
+      radius - 6.5,
+      Paint()
+        ..color = AppColors.goldDark.withValues(alpha: 0.6)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2,
+    );
 
-    // 3. Facial Expressions Based on Emotional State
-    if (type == TransactionType.income) {
-      _drawHappyFace(canvas, coinCenter);
-      _drawCrown(canvas, coinCenter.translate(0, -radius - 4));
-    } else if (type == TransactionType.expense) {
-      _drawSadFace(canvas, coinCenter);
-    } else {
-      _drawCoolTransferFace(canvas, coinCenter);
+    // 3. Hands / Limbs waving
+    final double armAngle = (type == TransactionType.income)
+        ? -0.5 - (idleProgress * 0.3) // hands up celebrating
+        : 0.3 + (idleProgress * 0.2);
+
+    _drawArm(canvas, center.translate(-radius + 4, 8), isLeft: true, angle: armAngle);
+    _drawArm(canvas, center.translate(radius - 4, 8), isLeft: false, angle: armAngle);
+
+    // If flipped to back side during 3D coin spin, show emblem
+    if (isFlipped) {
+      final emblemPaint = Paint()
+        ..color = AppColors.goldDark
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.5;
+      canvas.drawCircle(center, 18, emblemPaint);
+      canvas.drawLine(center.translate(-8, 0), center.translate(8, 0), emblemPaint);
+      canvas.drawLine(center.translate(0, -8), center.translate(0, 8), emblemPaint);
+      return;
     }
 
-    // 4. Specular Curved Glass Shine across coin
+    // 4. Facial Expressions
+    if (type == TransactionType.income) {
+      _drawIncomeFace(canvas, center);
+      _drawCrown(canvas, center.translate(0, -radius - 2));
+    } else if (type == TransactionType.expense) {
+      _drawExpenseFace(canvas, center);
+    } else {
+      _drawTransferFace(canvas, center);
+    }
+
+    // 5. Specular curved glass shine highlight
     final shinePath = Path()
-      ..moveTo(cx - 30, cy - radius + 12)
-      ..quadraticBezierTo(cx + 25, cy - radius + 18, cx + 34, cy - 6)
-      ..quadraticBezierTo(cx + 20, cy - radius + 32, cx - 30, cy - radius + 12);
+      ..moveTo(cx - 28, cy - radius + 10)
+      ..quadraticBezierTo(cx + 22, cy - radius + 16, cx + 32, cy - 8)
+      ..quadraticBezierTo(cx + 18, cy - radius + 28, cx - 28, cy - radius + 10);
 
     canvas.drawPath(
       shinePath,
-      Paint()..color = Colors.white.withValues(alpha: 0.45),
+      Paint()..color = Colors.white.withValues(alpha: 0.5),
     );
   }
 
-  void _drawHappyFace(Canvas canvas, Offset center) {
-    // Starry sparkling eyes
-    _drawStarEye(canvas, center.translate(-16, -6), 7.0);
-    _drawStarEye(canvas, center.translate(16, -6), 7.0);
+  void _drawArm(Canvas canvas, Offset joint, {required bool isLeft, required double angle}) {
+    final armPaint = Paint()
+      ..color = AppColors.goldPrimary
+      ..strokeWidth = 4.5
+      ..strokeCap = StrokeCap.round;
 
-    // Rosy pink cheeks
-    final cheekPaint = Paint()..color = const Color(0xFFFF8B94).withValues(alpha: 0.6);
-    canvas.drawCircle(center.translate(-22, 10), 5.5, cheekPaint);
-    canvas.drawCircle(center.translate(22, 10), 5.5, cheekPaint);
+    final double sign = isLeft ? -1 : 1;
+    final endX = joint.dx + (cos(angle) * 16 * sign);
+    final endY = joint.dy + (sin(angle) * 16);
 
-    // Big happy open grin
+    canvas.drawLine(joint, Offset(endX, endY), armPaint);
+    canvas.drawCircle(Offset(endX, endY), 3.5, Paint()..color = AppColors.goldLight);
+  }
+
+  void _drawIncomeFace(Canvas canvas, Offset center) {
+    // Star sparkle eyes
+    _drawStarEye(canvas, center.translate(-15, -6), 7.0);
+    _drawStarEye(canvas, center.translate(15, -6), 7.0);
+
+    // Blushing cheeks
+    final cheekPaint = Paint()..color = const Color(0xFFFF8B94).withValues(alpha: 0.7);
+    canvas.drawCircle(center.translate(-20, 8), 5.0, cheekPaint);
+    canvas.drawCircle(center.translate(20, 8), 5.0, cheekPaint);
+
+    // Wide open happy grin with tongue
     final mouthPath = Path()
-      ..moveTo(center.dx - 14, center.dy + 8)
-      ..quadraticBezierTo(center.dx, center.dy + 24, center.dx + 14, center.dy + 8)
+      ..moveTo(center.dx - 13, center.dy + 8)
+      ..quadraticBezierTo(center.dx, center.dy + 24, center.dx + 13, center.dy + 8)
       ..close();
 
-    final mouthPaint = Paint()..color = const Color(0xFF6B1D2F);
-    canvas.drawPath(mouthPath, mouthPaint);
-
-    // Tongue
-    final tonguePaint = Paint()..color = const Color(0xFFFF6B81);
+    canvas.drawPath(mouthPath, Paint()..color = const Color(0xFF5A1523));
     canvas.save();
     canvas.clipPath(mouthPath);
-    canvas.drawCircle(center.translate(0, 16), 8, tonguePaint);
+    canvas.drawCircle(center.translate(0, 16), 7.5, Paint()..color = const Color(0xFFFF6584));
     canvas.restore();
+  }
+
+  void _drawExpenseFace(Canvas canvas, Offset center) {
+    // Big teary anime eyes
+    final eyePaint = Paint()..color = const Color(0xFF2C3E50);
+    final highlight = Paint()..color = Colors.white;
+
+    canvas.drawCircle(center.translate(-14, -4), 8.0, eyePaint);
+    canvas.drawCircle(center.translate(-16, -7), 3.2, highlight);
+    canvas.drawCircle(center.translate(-12, -2), 1.6, highlight);
+
+    canvas.drawCircle(center.translate(14, -4), 8.0, eyePaint);
+    canvas.drawCircle(center.translate(12, -7), 3.2, highlight);
+    canvas.drawCircle(center.translate(16, -2), 1.6, highlight);
+
+    // Worried downturned eyebrows
+    final browPaint = Paint()
+      ..color = const Color(0xFF5A3A00)
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    canvas.drawLine(center.translate(-20, -15), center.translate(-9, -11), browPaint);
+    canvas.drawLine(center.translate(20, -15), center.translate(9, -11), browPaint);
+
+    // Trembling mouth
+    final mouthPath = Path()
+      ..moveTo(center.dx - 11, center.dy + 15)
+      ..quadraticBezierTo(center.dx - 5, center.dy + 10, center.dx, center.dy + 12)
+      ..quadraticBezierTo(center.dx + 5, center.dy + 10, center.dx + 11, center.dy + 15);
+
+    canvas.drawPath(mouthPath, browPaint);
+  }
+
+  void _drawTransferFace(Canvas canvas, Offset center) {
+    // Cool dark sunglasses
+    final glassPaint = Paint()..color = const Color(0xFF141722);
+    final leftGlass = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: center.translate(-15, -5), width: 25, height: 16),
+      const Radius.circular(5),
+    );
+    final rightGlass = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: center.translate(15, -5), width: 25, height: 16),
+      const Radius.circular(5),
+    );
+
+    canvas.drawRRect(leftGlass, glassPaint);
+    canvas.drawRRect(rightGlass, glassPaint);
+
+    // Frame Bridge
+    canvas.drawLine(
+      center.translate(-3, -5),
+      center.translate(3, -5),
+      Paint()
+        ..color = const Color(0xFF141722)
+        ..strokeWidth = 2.5,
+    );
+
+    // Diagonal Glint
+    final glint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.7)
+      ..strokeWidth = 1.4;
+    canvas.drawLine(center.translate(-23, -10), center.translate(-13, 0), glint);
+    canvas.drawLine(center.translate(7, -10), center.translate(17, 0), glint);
+
+    // Confident smirk
+    final smirkPath = Path()
+      ..moveTo(center.dx - 8, center.dy + 13)
+      ..quadraticBezierTo(center.dx + 4, center.dy + 15, center.dx + 11, center.dy + 9);
+
+    canvas.drawPath(
+      smirkPath,
+      Paint()
+        ..color = const Color(0xFF5A3A00)
+        ..strokeWidth = 2.2
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round,
+    );
   }
 
   void _drawStarEye(Canvas canvas, Offset pos, double r) {
@@ -497,180 +812,34 @@ class _CoinMascotPainter extends CustomPainter {
     }
     path.close();
 
-    canvas.drawPath(
-      path,
-      Paint()..color = const Color(0xFF4A2800),
-    );
-    canvas.drawCircle(
-      pos.translate(1, -1),
-      r * 0.25,
-      Paint()..color = Colors.white,
-    );
-  }
-
-  void _drawSadFace(Canvas canvas, Offset center) {
-    // Big teary glossy anime eyes
-    final eyePaint = Paint()..color = const Color(0xFF2C3E50);
-    final eyeHighlight = Paint()..color = Colors.white;
-
-    // Left eye
-    canvas.drawCircle(center.translate(-15, -4), 8.5, eyePaint);
-    canvas.drawCircle(center.translate(-17, -7), 3.5, eyeHighlight);
-    canvas.drawCircle(center.translate(-13, -2), 1.8, eyeHighlight);
-
-    // Right eye
-    canvas.drawCircle(center.translate(15, -4), 8.5, eyePaint);
-    canvas.drawCircle(center.translate(13, -7), 3.5, eyeHighlight);
-    canvas.drawCircle(center.translate(17, -2), 1.8, eyeHighlight);
-
-    // Worried downturned eyebrows
-    final browPaint = Paint()
-      ..color = const Color(0xFF5A3A00)
-      ..strokeWidth = 2.0
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-
-    canvas.drawLine(center.translate(-22, -16), center.translate(-10, -12), browPaint);
-    canvas.drawLine(center.translate(22, -16), center.translate(10, -12), browPaint);
-
-    // Quivering wavy sad mouth
-    final mouthPath = Path()
-      ..moveTo(center.dx - 12, center.dy + 16)
-      ..quadraticBezierTo(center.dx - 6, center.dy + 10, center.dx, center.dy + 13)
-      ..quadraticBezierTo(center.dx + 6, center.dy + 10, center.dx + 12, center.dy + 16);
-
-    final mouthOutline = Paint()
-      ..color = const Color(0xFF5A3A00)
-      ..strokeWidth = 2.5
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    canvas.drawPath(mouthPath, mouthOutline);
-  }
-
-  void _drawCoolTransferFace(Canvas canvas, Offset center) {
-    // Cool black shades / sunglasses
-    final glassPaint = Paint()..color = const Color(0xFF1A1A24);
-    final leftGlass = RRect.fromRectAndRadius(
-      Rect.fromCenter(center: center.translate(-16, -5), width: 26, height: 16),
-      const Radius.circular(5),
-    );
-    final rightGlass = RRect.fromRectAndRadius(
-      Rect.fromCenter(center: center.translate(16, -5), width: 26, height: 16),
-      const Radius.circular(5),
-    );
-
-    canvas.drawRRect(leftGlass, glassPaint);
-    canvas.drawRRect(rightGlass, glassPaint);
-
-    // Bridge of glasses
-    canvas.drawLine(
-      center.translate(-3, -5),
-      center.translate(3, -5),
-      Paint()
-        ..color = const Color(0xFF1A1A24)
-        ..strokeWidth = 2.5,
-    );
-
-    // Glint reflection line across sunglasses
-    final glintPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.6)
-      ..strokeWidth = 1.5;
-    canvas.drawLine(center.translate(-24, -10), center.translate(-14, 0), glintPaint);
-    canvas.drawLine(center.translate(8, -10), center.translate(18, 0), glintPaint);
-
-    // Confident smirk
-    final smirkPath = Path()
-      ..moveTo(center.dx - 8, center.dy + 14)
-      ..quadraticBezierTo(center.dx + 4, center.dy + 16, center.dx + 12, center.dy + 10);
-
-    canvas.drawPath(
-      smirkPath,
-      Paint()
-        ..color = const Color(0xFF5A3A00)
-        ..strokeWidth = 2.2
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round,
-    );
+    canvas.drawPath(path, Paint()..color = const Color(0xFF4A2800));
+    canvas.drawCircle(pos.translate(1, -1), r * 0.25, Paint()..color = Colors.white);
   }
 
   void _drawCrown(Canvas canvas, Offset pos) {
     final crownPath = Path()
-      ..moveTo(pos.dx - 18, pos.dy)
-      ..lineTo(pos.dx - 22, pos.dy - 16)
-      ..lineTo(pos.dx - 9, pos.dy - 8)
-      ..lineTo(pos.dx, pos.dy - 20)
-      ..lineTo(pos.dx + 9, pos.dy - 8)
-      ..lineTo(pos.dx + 22, pos.dy - 16)
-      ..lineTo(pos.dx + 18, pos.dy)
+      ..moveTo(pos.dx - 16, pos.dy)
+      ..lineTo(pos.dx - 20, pos.dy - 14)
+      ..lineTo(pos.dx - 8, pos.dy - 7)
+      ..lineTo(pos.dx, pos.dy - 18)
+      ..lineTo(pos.dx + 8, pos.dy - 7)
+      ..lineTo(pos.dx + 20, pos.dy - 14)
+      ..lineTo(pos.dx + 16, pos.dy)
       ..close();
 
     final crownPaint = Paint()
       ..shader = const LinearGradient(
         colors: [AppColors.goldLight, AppColors.goldPrimary, AppColors.goldDark],
-      ).createShader(Rect.fromCenter(center: pos, width: 44, height: 24));
+      ).createShader(Rect.fromCenter(center: pos, width: 40, height: 20));
 
     canvas.drawPath(crownPath, crownPaint);
-
-    // Tiny jewels on crown
-    final jewelPaint = Paint()..color = const Color(0xFFFF3366);
-    canvas.drawCircle(pos.translate(0, -20), 2.5, jewelPaint);
-    canvas.drawCircle(pos.translate(-22, -16), 2.0, jewelPaint);
-    canvas.drawCircle(pos.translate(22, -16), 2.0, jewelPaint);
-  }
-
-  void _drawCelebrationConfetti(Canvas canvas, double cx, double cy) {
-    final confettiPositions = [
-      Offset(cx - 50, cy - 35),
-      Offset(cx + 48, cy - 40),
-      Offset(cx - 38, cy + 30),
-      Offset(cx + 42, cy + 28),
-      Offset(cx - 20, cy - 55),
-      Offset(cx + 25, cy - 52),
-    ];
-
-    for (int i = 0; i < confettiPositions.length; i++) {
-      final p = confettiPositions[i];
-      final color = i.isEven ? AppColors.goldPrimary : const Color(0xFF00E676);
-      canvas.drawCircle(p, 3.0 + (i % 2), Paint()..color = color);
-    }
-  }
-
-  void _drawTeardropsAndSweat(Canvas canvas, double cx, double cy) {
-    final tearPaint = Paint()..color = const Color(0xFF4FC3F7);
-
-    // Animated teardrop falling from eye
-    final tearY = cy + 6.0 + (progress * 24.0);
-    canvas.drawCircle(Offset(cx - 15, tearY), 3.5, tearPaint);
-    canvas.drawCircle(Offset(cx + 15, tearY), 3.5, tearPaint);
-
-    // Sweat drop on top right forehead
-    final sweatPath = Path()
-      ..moveTo(cx + 34, cy - 32)
-      ..quadraticBezierTo(cx + 40, cy - 24, cx + 34, cy - 20)
-      ..quadraticBezierTo(cx + 28, cy - 24, cx + 34, cy - 32)
-      ..close();
-
-    canvas.drawPath(sweatPath, tearPaint);
-  }
-
-  void _drawPortalRings(Canvas canvas, double cx, double cy) {
-    final ringPaint = Paint()
-      ..color = AppColors.transferBlue.withValues(alpha: 0.35)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0;
-
-    canvas.drawOval(
-      Rect.fromCenter(center: Offset(cx, cy), width: 120, height: 40),
-      ringPaint,
-    );
+    canvas.drawCircle(pos.translate(0, -18), 2.2, Paint()..color = const Color(0xFFFF2D55));
   }
 
   @override
-  bool shouldRepaint(covariant _CoinMascotPainter oldDelegate) {
-    return oldDelegate.progress != progress ||
+  bool shouldRepaint(covariant _LivingCoinPainter oldDelegate) {
+    return oldDelegate.idleProgress != idleProgress ||
         oldDelegate.type != type ||
-        oldDelegate.isDark != isDark ||
-        oldDelegate.pokeOffset != pokeOffset;
+        oldDelegate.isFlipped != isFlipped;
   }
 }

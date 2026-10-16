@@ -106,18 +106,26 @@ class BalanceCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 10),
-                Text(
-                  CurrencyFormatter.format(
-                    totalBalance,
-                    currencyCode: currencyCode,
-                    isMasked: isMasked,
-                  ),
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -1.0,
-                    color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
-                  ),
+                TweenAnimationBuilder<double>(
+                  key: ValueKey('${totalBalance}_$isMasked'),
+                  tween: Tween<double>(begin: isMasked ? 0 : totalBalance * 0.7, end: totalBalance),
+                  duration: const Duration(milliseconds: 700),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, animatedVal, _) {
+                    return Text(
+                      CurrencyFormatter.format(
+                        animatedVal,
+                        currencyCode: currencyCode,
+                        isMasked: isMasked,
+                      ),
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -1.0,
+                        color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -170,18 +178,26 @@ class BalanceCard extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(height: 2),
-                            Text(
-                              CurrencyFormatter.format(
-                                monthlyIncome,
-                                currencyCode: currencyCode,
-                                isMasked: isMasked,
-                                decimalDigits: 0,
-                              ),
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.incomeGreen,
-                              ),
+                            TweenAnimationBuilder<double>(
+                              key: ValueKey('${monthlyIncome}_$isMasked'),
+                              tween: Tween<double>(begin: isMasked ? 0 : monthlyIncome * 0.7, end: monthlyIncome),
+                              duration: const Duration(milliseconds: 700),
+                              curve: Curves.easeOutCubic,
+                              builder: (context, animatedVal, _) {
+                                return Text(
+                                  CurrencyFormatter.format(
+                                    animatedVal,
+                                    currencyCode: currencyCode,
+                                    isMasked: isMasked,
+                                    decimalDigits: 0,
+                                  ),
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.incomeGreen,
+                                  ),
+                                );
+                              },
                             ),
                           ],
                         ),
@@ -228,18 +244,26 @@ class BalanceCard extends StatelessWidget {
                                 ),
                               ),
                               const SizedBox(height: 2),
-                              Text(
-                                CurrencyFormatter.format(
-                                  monthlyExpenses,
-                                  currencyCode: currencyCode,
-                                  isMasked: isMasked,
-                                  decimalDigits: 0,
-                                ),
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.expenseCoral,
-                                ),
+                              TweenAnimationBuilder<double>(
+                                key: ValueKey('${monthlyExpenses}_$isMasked'),
+                                tween: Tween<double>(begin: isMasked ? 0 : monthlyExpenses * 0.7, end: monthlyExpenses),
+                                duration: const Duration(milliseconds: 700),
+                                curve: Curves.easeOutCubic,
+                                builder: (context, animatedVal, _) {
+                                  return Text(
+                                    CurrencyFormatter.format(
+                                      animatedVal,
+                                      currencyCode: currencyCode,
+                                      isMasked: isMasked,
+                                      decimalDigits: 0,
+                                    ),
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.expenseCoral,
+                                    ),
+                                  );
+                                },
                               ),
                             ],
                           ),

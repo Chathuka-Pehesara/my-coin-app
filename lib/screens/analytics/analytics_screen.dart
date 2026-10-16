@@ -81,6 +81,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     final netSavings = totalIncome - totalExpense;
     final savingsRate = totalIncome > 0 ? (netSavings / totalIncome) * 100 : 0.0;
 
+    final totalCashflow = totalIncome + totalExpense;
+    final incomePercent = totalCashflow > 0 ? (totalIncome / totalCashflow) * 100 : 0.0;
+    final expensePercent = totalCashflow > 0 ? (totalExpense / totalCashflow) * 100 : 0.0;
+
     // Category Expense Breakdown
     final categoryTotals = <String, double>{};
     for (final tx in periodTransactions.where((t) => t.type == TransactionType.expense)) {
@@ -273,8 +277,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             ),
             const SizedBox(height: 12),
             Container(
-              height: 220,
-              padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+              height: 245,
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
               decoration: BoxDecoration(
                 color: isDark ? AppColors.darkSurface : Colors.white,
                 borderRadius: BorderRadius.circular(20),
@@ -285,13 +289,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               child: BarChart(
                 BarChartData(
                   alignment: BarChartAlignment.spaceAround,
-                  maxY: (totalIncome > totalExpense ? totalIncome : totalExpense) * 1.25 + 1000,
+                  maxY: ((totalIncome > totalExpense ? totalIncome : totalExpense) * 1.35 + 1000),
                   barTouchData: BarTouchData(
                     touchTooltipData: BarTouchTooltipData(
                       getTooltipItem: (group, groupIndex, rod, rodIndex) {
                         final isIncome = groupIndex == 0;
+                        final percent = isIncome ? incomePercent : expensePercent;
                         return BarTooltipItem(
-                          '${isIncome ? 'Income' : 'Expense'}\n${CurrencyFormatter.format(rod.toY, currencyCode: state.currencyCode, decimalDigits: 0)}',
+                          '${isIncome ? 'Income' : 'Expense'} (${percent.toStringAsFixed(1)}%)\n${CurrencyFormatter.format(rod.toY, currencyCode: state.currencyCode, decimalDigits: 0)}',
                           const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
                         );
                       },
@@ -320,7 +325,48 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     ),
                     leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                     rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    topTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 34,
+                        getTitlesWidget: (val, meta) {
+                          if (val.toInt() == 0) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: AppColors.incomeGreenLight,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: AppColors.incomeGreen.withValues(alpha: 0.3)),
+                                ),
+                                child: Text(
+                                  '${incomePercent.toStringAsFixed(1)}%',
+                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.incomeGreen),
+                                ),
+                              ),
+                            );
+                          } else if (val.toInt() == 1) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: AppColors.expenseCoralLight,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: AppColors.expenseCoral.withValues(alpha: 0.3)),
+                                ),
+                                child: Text(
+                                  '${expensePercent.toStringAsFixed(1)}%',
+                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.expenseCoral),
+                                ),
+                              ),
+                            );
+                          }
+                          return const SizedBox.shrink();
+                        },
+                      ),
+                    ),
                   ),
                   gridData: const FlGridData(show: false),
                   borderData: FlBorderData(show: false),
@@ -331,8 +377,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                         BarChartRodData(
                           toY: totalIncome,
                           color: AppColors.incomeGreen,
-                          width: 38,
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                          width: 42,
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
                         ),
                       ],
                     ),
@@ -342,8 +388,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                         BarChartRodData(
                           toY: totalExpense,
                           color: AppColors.expenseCoral,
-                          width: 38,
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                          width: 42,
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
                         ),
                       ],
                     ),
@@ -377,107 +423,216 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                       padding: EdgeInsets.symmetric(vertical: 24),
                       child: Center(child: Text('No expense data recorded for this period.')),
                     )
-                  : Column(
-                      children: [
-                        SizedBox(
-                          height: 200,
-                          child: PieChart(
-                            PieChartData(
-                              pieTouchData: PieTouchData(
-                                touchCallback: (FlTouchEvent event, pieTouchResponse) {
-                                  setState(() {
-                                    if (!event.isInterestedForInteractions ||
-                                        pieTouchResponse == null ||
-                                        pieTouchResponse.touchedSection == null) {
-                                      _touchedPieIndex = -1;
-                                      return;
-                                    }
-                                    _touchedPieIndex = pieTouchResponse.touchedSection!.touchedSectionIndex;
-                                  });
-                                },
-                              ),
-                              borderData: FlBorderData(show: false),
-                              sectionsSpace: 2,
-                              centerSpaceRadius: 48,
-                              sections: List.generate(sortedCategoryEntries.length, (i) {
-                                final entry = sortedCategoryEntries[i];
-                                final isTouched = i == _touchedPieIndex;
-                                final radius = isTouched ? 54.0 : 46.0;
-                                final category = state.categories.firstWhere(
-                                  (c) => c.id == entry.key,
-                                  orElse: () => Category(id: '', name: 'Other', type: CategoryType.expense, iconCode: 0, colorValue: 0xFFC5A059),
-                                );
-                                final percentage = (entry.value / totalExpense) * 100;
+                  : Builder(
+                      builder: (context) {
+                        String centerCategoryTitle = 'Total Expenses';
+                        String centerCategoryPercent = '100%';
+                        String centerCategoryAmount = CurrencyFormatter.format(
+                          totalExpense,
+                          currencyCode: state.currencyCode,
+                          isMasked: state.isBalanceMasked,
+                          decimalDigits: 0,
+                        );
 
-                                return PieChartSectionData(
-                                  color: category.color,
-                                  value: entry.value,
-                                  title: '${percentage.toStringAsFixed(0)}%',
-                                  radius: radius,
-                                  titleStyle: TextStyle(
-                                    fontSize: isTouched ? 13 : 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                );
-                              }),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Category Legend list
-                        ...sortedCategoryEntries.map((entry) {
-                          final category = state.categories.firstWhere(
-                            (c) => c.id == entry.key,
+                        if (_touchedPieIndex >= 0 && _touchedPieIndex < sortedCategoryEntries.length) {
+                          final activeEntry = sortedCategoryEntries[_touchedPieIndex];
+                          final activeCategory = state.categories.firstWhere(
+                            (c) => c.id == activeEntry.key,
                             orElse: () => Category(id: '', name: 'Other', type: CategoryType.expense, iconCode: 0, colorValue: 0xFFC5A059),
                           );
-                          final percent = (entry.value / totalExpense) * 100;
+                          centerCategoryTitle = activeCategory.name;
+                          final p = totalExpense > 0 ? (activeEntry.value / totalExpense) * 100 : 0.0;
+                          centerCategoryPercent = '${p.toStringAsFixed(1)}%';
+                          centerCategoryAmount = CurrencyFormatter.format(
+                            activeEntry.value,
+                            currencyCode: state.currencyCode,
+                            isMasked: state.isBalanceMasked,
+                            decimalDigits: 0,
+                          );
+                        }
 
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 6),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 12,
-                                  height: 12,
-                                  decoration: BoxDecoration(
-                                    color: category.color,
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    category.name,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                        return Column(
+                          children: [
+                            SizedBox(
+                              height: 220,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  PieChart(
+                                    PieChartData(
+                                      pieTouchData: PieTouchData(
+                                        touchCallback: (FlTouchEvent event, pieTouchResponse) {
+                                          setState(() {
+                                            if (!event.isInterestedForInteractions ||
+                                                pieTouchResponse == null ||
+                                                pieTouchResponse.touchedSection == null) {
+                                              _touchedPieIndex = -1;
+                                              return;
+                                            }
+                                            _touchedPieIndex = pieTouchResponse.touchedSection!.touchedSectionIndex;
+                                          });
+                                        },
+                                      ),
+                                      borderData: FlBorderData(show: false),
+                                      sectionsSpace: 2,
+                                      centerSpaceRadius: 52,
+                                      sections: List.generate(sortedCategoryEntries.length, (i) {
+                                        final entry = sortedCategoryEntries[i];
+                                        final isTouched = i == _touchedPieIndex;
+                                        final radius = isTouched ? 56.0 : 46.0;
+                                        final category = state.categories.firstWhere(
+                                          (c) => c.id == entry.key,
+                                          orElse: () => Category(id: '', name: 'Other', type: CategoryType.expense, iconCode: 0, colorValue: 0xFFC5A059),
+                                        );
+                                        final percentage = totalExpense > 0 ? (entry.value / totalExpense) * 100 : 0.0;
+
+                                        return PieChartSectionData(
+                                          color: category.color,
+                                          value: entry.value,
+                                          title: isTouched ? '${percentage.toStringAsFixed(1)}%' : '${percentage.toStringAsFixed(0)}%',
+                                          radius: radius,
+                                          titleStyle: TextStyle(
+                                            fontSize: isTouched ? 12 : 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
+                                        );
+                                      }),
                                     ),
                                   ),
-                                ),
-                                Text(
-                                  '${percent.toStringAsFixed(1)}%',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                                  // Center Hole Interactive Inspector
+                                  IgnorePointer(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                                          child: Text(
+                                            centerCategoryTitle,
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          centerCategoryPercent,
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w800,
+                                            color: AppColors.goldPrimary,
+                                          ),
+                                        ),
+                                        Text(
+                                          centerCategoryAmount,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 12),
-                                Text(
-                                  CurrencyFormatter.format(entry.value, currencyCode: state.currencyCode, isMasked: state.isBalanceMasked),
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
-                                  ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          );
-                        }),
-                      ],
+                            const SizedBox(height: 18),
+
+                            // Category Interactive Legend & Drilldown List
+                            ...List.generate(sortedCategoryEntries.length, (i) {
+                              final entry = sortedCategoryEntries[i];
+                              final category = state.categories.firstWhere(
+                                (c) => c.id == entry.key,
+                                orElse: () => Category(id: '', name: 'Other', type: CategoryType.expense, iconCode: 0, colorValue: 0xFFC5A059),
+                              );
+                              final percent = totalExpense > 0 ? (entry.value / totalExpense) * 100 : 0.0;
+                              final isSelected = i == _touchedPieIndex;
+
+                              return InkWell(
+                                onTap: () {
+                                  setState(() => _touchedPieIndex = (_touchedPieIndex == i ? -1 : i));
+                                  final catTransactions = periodTransactions
+                                      .where((t) => t.type == TransactionType.expense && t.categoryId == entry.key)
+                                      .toList();
+                                  _showCategoryTransactionsSheet(
+                                    context,
+                                    category,
+                                    catTransactions,
+                                    state.currencyCode,
+                                    state.isBalanceMasked,
+                                  );
+                                },
+                                borderRadius: BorderRadius.circular(12),
+                                child: Container(
+                                  margin: const EdgeInsets.symmetric(vertical: 3),
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? (category.color.withValues(alpha: isDark ? 0.2 : 0.12))
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: isSelected
+                                        ? Border.all(color: category.color.withValues(alpha: 0.5))
+                                        : null,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 28,
+                                        height: 28,
+                                        decoration: BoxDecoration(
+                                          color: category.color.withValues(alpha: 0.2),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Icon(category.icon, size: 15, color: category.color),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              category.name,
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w600,
+                                                color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                                              ),
+                                            ),
+                                            Text(
+                                              '${percent.toStringAsFixed(1)}% of total expenses',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Text(
+                                        CurrencyFormatter.format(entry.value, currencyCode: state.currencyCode, isMasked: state.isBalanceMasked),
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
+                                          color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Icon(Icons.chevron_right_rounded, size: 16, color: isDark ? AppColors.darkTextSecondary : AppColors.textTertiary),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }),
+                          ],
+                        );
+                      },
                     ),
             ),
             const SizedBox(height: 24),
@@ -584,6 +739,129 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  void _showCategoryTransactionsSheet(
+    BuildContext context,
+    Category category,
+    List<TransactionRecord> transactions,
+    String currencyCode,
+    bool isMasked,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? AppColors.darkBackground : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetCtx) {
+        return Container(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.darkBorder : AppColors.cardBorder,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: category.color.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(category.icon, size: 20, color: category.color),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          category.name,
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          '${transactions.length} transactions in this period',
+                          style: TextStyle(fontSize: 12, color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    CurrencyFormatter.format(
+                      transactions.fold(0.0, (s, t) => s + t.amount),
+                      currencyCode: currencyCode,
+                      isMasked: isMasked,
+                    ),
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.expenseCoral),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const Divider(height: 1),
+              const SizedBox(height: 12),
+
+              if (transactions.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(child: Text('No transactions recorded for this category.')),
+                )
+              else
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 280),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: transactions.length,
+                    separatorBuilder: (context, index) => const Divider(height: 12),
+                    itemBuilder: (_, idx) {
+                      final tx = transactions[idx];
+                      return Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  tx.title,
+                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                                ),
+                                if (tx.merchant != null && tx.merchant!.isNotEmpty)
+                                  Text(
+                                    tx.merchant!,
+                                    style: TextStyle(fontSize: 11, color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            '-${CurrencyFormatter.format(tx.amount, currencyCode: currencyCode, isMasked: isMasked)}',
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.expenseCoral),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

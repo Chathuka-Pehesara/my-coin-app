@@ -6,6 +6,7 @@ import '../../models/transaction_record.dart';
 import '../../providers/app_state_provider.dart';
 import '../../widgets/coin_avatar.dart';
 import '../../widgets/balance_card.dart';
+import '../../widgets/dashboard_mascot_widget.dart';
 import '../../widgets/transaction_tile.dart';
 import '../../widgets/spending_heatmap.dart';
 import '../transactions/add_edit_transaction_screen.dart';
@@ -144,6 +145,10 @@ class DashboardScreen extends StatelessWidget {
                 ),
               ],
             ),
+            const SizedBox(height: 20),
+
+            // Live mascot companion ("Coiny")
+            const DashboardMascotWidget(),
             const SizedBox(height: 22),
 
             // Contextual Insights Section

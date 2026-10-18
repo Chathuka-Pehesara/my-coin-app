@@ -6,7 +6,7 @@ import '../core/theme/app_colors.dart';
 import '../core/utils/currency_formatter.dart';
 import '../models/transaction_record.dart';
 
-/// Interactive Animated Coin Mascot ("Coiny") with 3D touch physics, coin flip, and particle effects
+/// Full-Screen Arcade Coin Blast & Mascot Reaction Dialog
 class CoinCharacterReactionModal extends StatefulWidget {
   final TransactionRecord transaction;
   final String currencyCode;
@@ -27,15 +27,23 @@ class CoinCharacterReactionModal extends StatefulWidget {
     required String currencyCode,
     bool isMasked = false,
   }) async {
-    await showModalBottomSheet(
+    await showGeneralDialog(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => CoinCharacterReactionModal(
+      barrierDismissible: true,
+      barrierLabel: 'CoinCelebration',
+      barrierColor: Colors.black.withValues(alpha: 0.55),
+      transitionDuration: const Duration(milliseconds: 320),
+      pageBuilder: (ctx, anim1, anim2) => CoinCharacterReactionModal(
         transaction: transaction,
         currencyCode: currencyCode,
         isMasked: isMasked,
       ),
+      transitionBuilder: (ctx, anim1, anim2, child) {
+        return FadeTransition(
+          opacity: CurvedAnimation(parent: anim1, curve: Curves.easeOut),
+          child: child,
+        );
+      },
     );
   }
 
@@ -45,18 +53,19 @@ class CoinCharacterReactionModal extends StatefulWidget {
 
 class _CoinCharacterReactionModalState extends State<CoinCharacterReactionModal>
     with TickerProviderStateMixin {
-  // Continuous idle breathing & bouncing controller
+  // Idle breathing animation
   late AnimationController _idleController;
-
-  // 3D Coin Flip controller
+  // Mascot 3D flip animation
   late AnimationController _flipController;
+  // Vacuum absorption animation controller
+  late AnimationController _vacuumController;
 
-  // Elastic drag offset
+  // Mascot drag offset
   Offset _dragOffset = Offset.zero;
 
-  // Continuous particle simulator
-  final List<_MascotParticle> _particles = [];
-  Timer? _particleTimer;
+  // Full-screen arcade coin blast physics list
+  final List<_ArcadeCoin> _arcadeCoins = [];
+  Timer? _physicsTimer;
   final Random _random = Random();
 
   Timer? _autoDismissTimer;
@@ -64,6 +73,8 @@ class _CoinCharacterReactionModalState extends State<CoinCharacterReactionModal>
   Timer? _progressTimer;
   int _pokeCount = 0;
   late String _mascotSpeech;
+  bool _isAbsorbing = false;
+  Offset _absorptionTarget = const Offset(200, 120);
 
   @override
   void initState() {
@@ -79,24 +90,36 @@ class _CoinCharacterReactionModalState extends State<CoinCharacterReactionModal>
       duration: const Duration(milliseconds: 650),
     );
 
+    _vacuumController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+
     _mascotSpeech = _getRandomPhrase(widget.transaction.type);
 
-    // Initial burst of particles
-    _spawnParticles(count: 24);
-
-    // Continuous particle generation at 30fps
-    _particleTimer = Timer.periodic(const Duration(milliseconds: 60), (_) {
+    // Initial Arcade Coin Blast! (40+ coins exploding outward)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        _updateParticles();
+        final size = MediaQuery.of(context).size;
+        _absorptionTarget = Offset(size.width / 2, size.height * 0.16);
+        _launchArcadeCoinBlast(count: 38);
       }
     });
 
-    // Auto-dismiss countdown (3.8 seconds total so user can play with Coiny)
-    const totalMs = 3800;
+    // 60fps physics simulation ticker
+    _physicsTimer = Timer.periodic(const Duration(milliseconds: 16), (_) {
+      if (mounted) {
+        _tickPhysics();
+      }
+    });
+
+    // Auto-dismiss countdown (4.5s so user can play with coin blast)
+    const totalMs = 4500;
     const intervalMs = 50;
     int elapsed = 0;
 
     _progressTimer = Timer.periodic(const Duration(milliseconds: intervalMs), (timer) {
+      if (_isAbsorbing) return;
       elapsed += intervalMs;
       if (mounted) {
         setState(() {
@@ -106,9 +129,8 @@ class _CoinCharacterReactionModalState extends State<CoinCharacterReactionModal>
     });
 
     _autoDismissTimer = Timer(const Duration(milliseconds: totalMs), () {
-      if (mounted) {
-        Navigator.of(context).pop();
-        widget.onDismissed?.call();
+      if (mounted && !_isAbsorbing) {
+        _startVacuumAbsorption();
       }
     });
 
@@ -121,69 +143,139 @@ class _CoinCharacterReactionModalState extends State<CoinCharacterReactionModal>
   void dispose() {
     _idleController.dispose();
     _flipController.dispose();
-    _particleTimer?.cancel();
+    _vacuumController.dispose();
+    _physicsTimer?.cancel();
     _autoDismissTimer?.cancel();
     _progressTimer?.cancel();
     super.dispose();
   }
 
-  void _spawnParticles({int count = 10}) {
-    final type = widget.transaction.type;
-    for (int i = 0; i < count; i++) {
-      final angle = _random.nextDouble() * 2 * pi;
-      final speed = 30.0 + _random.nextDouble() * 120.0;
+  void _launchArcadeCoinBlast({int count = 30}) {
+    final size = MediaQuery.of(context).size;
+    final startX = size.width / 2;
+    final startY = size.height * 0.52; // originate from mascot
 
-      Color pColor;
+    final type = widget.transaction.type;
+
+    for (int i = 0; i < count; i++) {
+      final angle = -pi / 2 + (_random.nextDouble() - 0.5) * (pi * 0.85);
+      final speed = 250.0 + _random.nextDouble() * 450.0;
+
+      String emoji = '🪙';
       if (type == TransactionType.income) {
-        pColor = i.isEven ? AppColors.goldPrimary : AppColors.goldLight;
+        final options = ['🪙', '🪙', '🪙', '✨', '🌟', '💰'];
+        emoji = options[_random.nextInt(options.length)];
       } else if (type == TransactionType.expense) {
-        pColor = const Color(0xFF4FC3F7);
+        final options = ['🪙', '💧', '💸', '🥺', '⚡'];
+        emoji = options[_random.nextInt(options.length)];
       } else {
-        pColor = i.isEven ? AppColors.transferBlue : AppColors.goldLight;
+        final options = ['🪙', '🔄', '⚡', '💫', '✨'];
+        emoji = options[_random.nextInt(options.length)];
       }
 
-      _particles.add(
-        _MascotParticle(
-          x: 0,
-          y: 0,
+      _arcadeCoins.add(
+        _ArcadeCoin(
+          x: startX + (_random.nextDouble() - 0.5) * 40,
+          y: startY + (_random.nextDouble() - 0.5) * 40,
           vx: cos(angle) * speed,
-          vy: sin(angle) * speed - (type == TransactionType.income ? 60 : 0),
-          color: pColor,
-          size: 3.5 + _random.nextDouble() * 5.0,
+          vy: sin(angle) * speed,
+          emoji: emoji,
+          size: 18.0 + _random.nextDouble() * 18.0,
           rotation: _random.nextDouble() * 2 * pi,
-          rotationSpeed: (_random.nextDouble() - 0.5) * 8.0,
-          maxLife: 0.8 + _random.nextDouble() * 0.8,
+          rotSpeed: (_random.nextDouble() - 0.5) * 9.0,
+          scale: 0.2,
+          targetScale: 0.8 + _random.nextDouble() * 0.45,
+          opacity: 1.0,
         ),
       );
     }
   }
 
-  void _updateParticles() {
+  void _tickPhysics() {
+    final size = MediaQuery.of(context).size;
+    final dt = 0.016;
+
     setState(() {
-      for (int i = _particles.length - 1; i >= 0; i--) {
-        final p = _particles[i];
-        p.age += 0.06;
-        p.x += p.vx * 0.06;
-        p.y += p.vy * 0.06;
-        p.rotation += p.rotationSpeed * 0.06;
+      for (int i = _arcadeCoins.length - 1; i >= 0; i--) {
+        final coin = _arcadeCoins[i];
 
-        // Gravity
-        if (widget.transaction.type == TransactionType.income) {
-          p.vy += 80 * 0.06;
-        } else if (widget.transaction.type == TransactionType.expense) {
-          p.vy += 120 * 0.06;
-        }
+        if (_isAbsorbing) {
+          // Vacuum Absorption: curve towards absorption target
+          final dx = _absorptionTarget.dx - coin.x;
+          final dy = _absorptionTarget.dy - coin.y;
+          final dist = sqrt(dx * dx + dy * dy);
 
-        if (p.age >= p.maxLife) {
-          _particles.removeAt(i);
+          if (dist < 28) {
+            // Absorbed into vault!
+            _arcadeCoins.removeAt(i);
+            continue;
+          }
+
+          final pullStrength = 1800.0;
+          coin.vx += (dx / dist) * pullStrength * dt;
+          coin.vy += (dy / dist) * pullStrength * dt;
+          coin.x += coin.vx * dt;
+          coin.y += coin.vy * dt;
+          coin.rotation += coin.rotSpeed * dt * 3;
+          coin.scale = (coin.scale - 0.035).clamp(0.05, 1.5);
+          coin.opacity = (coin.opacity - 0.02).clamp(0.0, 1.0);
+        } else {
+          // Standard Arcade physics with gravity and bounce
+          coin.vy += 650.0 * dt; // gravity
+          coin.x += coin.vx * dt;
+          coin.y += coin.vy * dt;
+          coin.rotation += coin.rotSpeed * dt;
+
+          // Scale pop-in
+          if (coin.scale < coin.targetScale) {
+            coin.scale = (coin.scale + dt * 4.5).clamp(0.0, coin.targetScale);
+          }
+
+          // Screen boundaries bounce
+          if (coin.x < 15) {
+            coin.x = 15;
+            coin.vx = -coin.vx * 0.65;
+          } else if (coin.x > size.width - 25) {
+            coin.x = size.width - 25;
+            coin.vx = -coin.vx * 0.65;
+          }
+
+          // Floor bounce
+          if (coin.y > size.height - 35) {
+            coin.y = size.height - 35;
+            coin.vy = -coin.vy * 0.55;
+            coin.vx = coin.vx * 0.85; // friction
+          }
         }
       }
 
-      // Keep spawning continuous flow
-      if (_particles.length < 20) {
-        _spawnParticles(count: 3);
+      // If absorbing finished and all coins absorbed, close modal
+      if (_isAbsorbing && _arcadeCoins.isEmpty) {
+        _finishAndClose();
       }
     });
+  }
+
+  void _startVacuumAbsorption() {
+    if (_isAbsorbing) return;
+    _isAbsorbing = true;
+    _autoDismissTimer?.cancel();
+    _progressTimer?.cancel();
+
+    try {
+      HapticFeedback.heavyImpact();
+    } catch (_) {}
+
+    setState(() {
+      _mascotSpeech = 'Absorbing wealth into the vault! 🚀✨';
+    });
+  }
+
+  void _finishAndClose() {
+    if (mounted) {
+      Navigator.of(context).pop();
+      widget.onDismissed?.call();
+    }
   }
 
   void _onPokeCoiny() {
@@ -192,7 +284,7 @@ class _CoinCharacterReactionModalState extends State<CoinCharacterReactionModal>
     } catch (_) {}
 
     _flipController.forward(from: 0.0);
-    _spawnParticles(count: 16);
+    _launchArcadeCoinBlast(count: 22);
 
     setState(() {
       _pokeCount++;
@@ -201,6 +293,7 @@ class _CoinCharacterReactionModalState extends State<CoinCharacterReactionModal>
           'Wheee! Coin shower! 🌟🪙',
           'Stacking up the gold! 👑',
           'You clicked me! More wealth incoming! 🚀',
+          'Arcade frenzy activated! 🪙⚡',
         ];
         _mascotSpeech = phrases[_pokeCount % phrases.length];
       } else if (widget.transaction.type == TransactionType.expense) {
@@ -208,13 +301,14 @@ class _CoinCharacterReactionModalState extends State<CoinCharacterReactionModal>
           'Oof! Don\'t poke, I\'m mourning the budget! 🥺',
           'Shedding little gold tears! 😭💸',
           'Watch the wallet! Protect the vault! 🛡️',
+          'Saving up is the true superpower! 💪',
         ];
         _mascotSpeech = phrases[_pokeCount % phrases.length];
       } else {
         final phrases = [
           'Vault swap confirmed! 🕶️⚡',
           'Hyperdrive transfer complete! 🌀',
-          'Smooth positioning! 😎',
+          'Smooth tactical positioning! 😎',
         ];
         _mascotSpeech = phrases[_pokeCount % phrases.length];
       }
@@ -251,7 +345,7 @@ class _CoinCharacterReactionModalState extends State<CoinCharacterReactionModal>
       typeIcon = Icons.south_west_rounded;
     } else {
       accentColor = AppColors.transferBlue;
-      typeLabel = 'Transfer Relocated';
+      typeLabel = 'Account Transfer';
       typeIcon = Icons.swap_horiz_rounded;
     }
 
@@ -261,249 +355,323 @@ class _CoinCharacterReactionModalState extends State<CoinCharacterReactionModal>
       isMasked: widget.isMasked,
     );
 
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkBackground : Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 24,
-            offset: const Offset(0, -6),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Stack(
         children: [
-          // Auto-dismiss countdown line
-          ClipRRect(
-            borderRadius: BorderRadius.circular(2),
-            child: LinearProgressIndicator(
-              value: _dismissProgress,
-              minHeight: 3.5,
-              backgroundColor: isDark ? AppColors.darkSurfaceElevated : AppColors.surfaceElevated,
-              valueColor: AlwaysStoppedAnimation<Color>(accentColor),
+          // Background Tap dismiss/absorb layer
+          GestureDetector(
+            onTap: _startVacuumAbsorption,
+            behavior: HitTestBehavior.opaque,
+            child: const SizedBox.expand(),
+          ),
+
+          // Arcade Coin Blast Flying Particles
+          IgnorePointer(
+            child: CustomPaint(
+              size: Size.infinite,
+              painter: _ArcadeCoinBlastPainter(coins: _arcadeCoins),
             ),
           ),
-          const SizedBox(height: 14),
 
-          // Speech Bubble
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 250),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.darkSurface : AppColors.surfaceElevated,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: accentColor.withValues(alpha: 0.5),
-                width: 1.2,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: accentColor.withValues(alpha: 0.15),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
+          // Top Vacuum Target Glow Pill
+          Positioned(
+            top: 50,
+            left: 24,
+            right: 24,
+            child: Center(
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 300),
+                opacity: _isAbsorbing ? 1.0 : 0.85,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: (isDark ? AppColors.darkSurfaceElevated : Colors.white)
+                        .withValues(alpha: 0.92),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: _isAbsorbing ? AppColors.goldPrimary : AppColors.cardBorder,
+                      width: _isAbsorbing ? 2 : 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.goldPrimary.withValues(alpha: _isAbsorbing ? 0.4 : 0.15),
+                        blurRadius: _isAbsorbing ? 18 : 8,
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('🪙', style: TextStyle(fontSize: 16)),
+                      const SizedBox(width: 8),
+                      Text(
+                        _isAbsorbing ? 'Collecting Coins...' : 'Tap anywhere to Collect ✨',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ],
-            ),
-            child: Text(
-              _mascotSpeech,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
               ),
             ),
           ),
-          const SizedBox(height: 10),
 
-          // Interactive 3D Physics Character Area
-          SizedBox(
-            height: 170,
-            width: double.infinity,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                // Live Particle Layer
-                CustomPaint(
-                  size: const Size(220, 170),
-                  painter: _ParticleCanvasPainter(particles: _particles),
+          // Bottom Mascot and Details Card
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: Container(
+              width: double.infinity,
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.darkSurface : Colors.white,
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(
+                  color: isDark ? AppColors.darkBorder : AppColors.cardBorder,
+                  width: 1,
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.45 : 0.18),
+                    blurRadius: 28,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Dismiss progress bar indicator
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(3),
+                    child: SizedBox(
+                      height: 4,
+                      width: 54,
+                      child: LinearProgressIndicator(
+                        value: _dismissProgress,
+                        backgroundColor: isDark ? AppColors.darkBorder : AppColors.goldSubtle,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          _dismissProgress > 0.3 ? AppColors.goldPrimary : AppColors.expenseCoral,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
 
-                // Interactive Draggable / Flippable Coin Character
-                GestureDetector(
-                  onTap: _onPokeCoiny,
-                  onPanUpdate: (details) {
-                    setState(() {
-                      _dragOffset += details.delta * 0.6;
-                    });
-                  },
-                  onPanEnd: (_) {
-                    setState(() {
-                      _dragOffset = Offset.zero;
-                    });
-                    try {
-                      HapticFeedback.selectionClick();
-                    } catch (_) {}
-                  },
-                  child: AnimatedBuilder(
-                    animation: Listenable.merge([_idleController, _flipController]),
-                    builder: (context, _) {
-                      // Elastic spring bounce when returning from drag
-                      final idleBounce = sin(_idleController.value * pi) * 6.0;
-                      final flipVal = _flipController.value;
+                  // Mascot Speech Bubble
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 250),
+                    child: Container(
+                      key: ValueKey(_mascotSpeech),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: accentColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: accentColor.withValues(alpha: 0.35)),
+                      ),
+                      child: Text(
+                        _mascotSpeech,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
 
-                      return Transform.translate(
-                        offset: Offset(_dragOffset.dx, _dragOffset.dy - idleBounce),
-                        child: Transform(
-                          alignment: Alignment.center,
-                          transform: Matrix4.identity()
-                            ..setEntry(3, 2, 0.002) // 3D Perspective
-                            ..rotateY(flipVal * 2 * pi) // Full 360 flip on poke
-                            ..rotateZ((_dragOffset.dx * 0.008).clamp(-0.25, 0.25)),
-                          child: SizedBox(
-                            width: 120,
-                            height: 120,
-                            child: CustomPaint(
-                              painter: _LivingCoinPainter(
-                                idleProgress: _idleController.value,
-                                type: type,
-                                isDark: isDark,
-                                isFlipped: flipVal > 0.25 && flipVal < 0.75,
+                  // Interactive Mascot ("Coiny")
+                  SizedBox(
+                    height: 130,
+                    width: double.infinity,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        // Interactive Drag & Tap mascot
+                        GestureDetector(
+                          onTap: _onPokeCoiny,
+                          onPanUpdate: (details) {
+                            setState(() {
+                              _dragOffset = Offset(
+                                (_dragOffset.dx + details.delta.dx).clamp(-40.0, 40.0),
+                                (_dragOffset.dy + details.delta.dy).clamp(-30.0, 30.0),
+                              );
+                            });
+                          },
+                          onPanEnd: (_) {
+                            setState(() {
+                              _dragOffset = Offset.zero;
+                            });
+                          },
+                          child: AnimatedBuilder(
+                            animation: Listenable.merge([_idleController, _flipController]),
+                            builder: (context, child) {
+                              final idleBounce = sin(_idleController.value * pi) * 7;
+                              final flipValue = _flipController.value * pi * 2;
+                              final isFlipped = cos(flipValue) < 0;
+
+                              return Transform.translate(
+                                offset: Offset(_dragOffset.dx, _dragOffset.dy - idleBounce),
+                                child: Transform(
+                                  alignment: Alignment.center,
+                                  transform: Matrix4.identity()
+                                    ..setEntry(3, 2, 0.001)
+                                    ..rotateY(flipValue)
+                                    ..rotateZ((_dragOffset.dx / 40.0) * 0.2),
+                                  child: CustomPaint(
+                                    size: const Size(110, 110),
+                                    painter: _LivingCoinPainter(
+                                      idleProgress: _idleController.value,
+                                      type: type,
+                                      isDark: isDark,
+                                      isFlipped: isFlipped,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+
+                        // Interactive hint badge
+                        Positioned(
+                          bottom: 0,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? AppColors.darkSurfaceElevated
+                                  : Colors.white.withValues(alpha: 0.9),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: isDark ? AppColors.darkBorder : AppColors.cardBorder,
                               ),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.touch_app_rounded, size: 12, color: AppColors.goldDark),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Tap Coiny to blast coins! 🪙',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.goldDark,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                      );
-                    },
+                      ],
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 10),
 
-                // Tap & Drag hint badge
-                Positioned(
-                  bottom: 2,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                  // Transaction Summary Card
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     decoration: BoxDecoration(
-                      color: isDark ? AppColors.darkSurfaceElevated : Colors.white.withValues(alpha: 0.9),
-                      borderRadius: BorderRadius.circular(10),
+                      color: isDark ? AppColors.darkSurfaceElevated : AppColors.surfaceElevated,
+                      borderRadius: BorderRadius.circular(16),
                       border: Border.all(
                         color: isDark ? AppColors.darkBorder : AppColors.cardBorder,
                       ),
                     ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Icon(Icons.touch_app_rounded, size: 12, color: AppColors.goldDark),
-                        SizedBox(width: 4),
-                        Text(
-                          'Tap or drag Coiny to interact',
-                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.goldDark),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Transaction Pill
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.darkSurfaceElevated : AppColors.surfaceElevated,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: isDark ? AppColors.darkBorder : AppColors.cardBorder,
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(7),
-                      decoration: BoxDecoration(
-                        color: accentColor.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(9),
-                      ),
-                      child: Icon(typeIcon, size: 16, color: accentColor),
-                    ),
-                    const SizedBox(width: 10),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.transaction.title,
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(7),
+                              decoration: BoxDecoration(
+                                color: accentColor.withValues(alpha: 0.18),
+                                borderRadius: BorderRadius.circular(9),
+                              ),
+                              child: Icon(typeIcon, size: 16, color: accentColor),
+                            ),
+                            const SizedBox(width: 10),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  widget.transaction.title,
+                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  typeLabel,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                         Text(
-                          typeLabel,
+                          '${type == TransactionType.income ? '+' : (type == TransactionType.expense ? '-' : '')}$formattedAmount',
                           style: TextStyle(
-                            fontSize: 11,
-                            color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: accentColor,
                           ),
                         ),
                       ],
                     ),
-                  ],
-                ),
-                Text(
-                  '${type == TransactionType.income ? '+' : (type == TransactionType.expense ? '-' : '')}$formattedAmount',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: accentColor,
                   ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
+                  const SizedBox(height: 14),
 
-          // Interactive Action Buttons
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 11),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  // Action Buttons
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 11),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                          onPressed: _onPokeCoiny,
+                          icon: const Icon(Icons.celebration_rounded, size: 16),
+                          label: Text(
+                            type == TransactionType.income ? 'Make It Rain 🪙' : 'Cheer Up 🌟',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.goldDark,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 11),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            elevation: 1,
+                          ),
+                          onPressed: _startVacuumAbsorption,
+                          icon: const Icon(Icons.auto_awesome_rounded, size: 16),
+                          label: const Text(
+                            'Collect Coins ✨',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  onPressed: _onPokeCoiny,
-                  icon: const Icon(Icons.celebration_rounded, size: 16),
-                  label: Text(
-                    type == TransactionType.income ? 'Make It Rain 🪙' : 'Cheer Up 🌟',
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                  ),
-                ),
+                ],
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.goldDark,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 11),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    elevation: 1,
-                  ),
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    widget.onDismissed?.call();
-                  },
-                  child: const Text('Awesome! ✨', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                ),
-              ),
-            ],
+            ),
           ),
         ],
       ),
@@ -511,60 +679,64 @@ class _CoinCharacterReactionModalState extends State<CoinCharacterReactionModal>
   }
 }
 
-class _MascotParticle {
+class _ArcadeCoin {
   double x;
   double y;
   double vx;
   double vy;
-  Color color;
+  String emoji;
   double size;
   double rotation;
-  double rotationSpeed;
-  double age = 0.0;
-  double maxLife;
+  double rotSpeed;
+  double scale;
+  double targetScale;
+  double opacity;
 
-  _MascotParticle({
+  _ArcadeCoin({
     required this.x,
     required this.y,
     required this.vx,
     required this.vy,
-    required this.color,
+    required this.emoji,
     required this.size,
     required this.rotation,
-    required this.rotationSpeed,
-    required this.maxLife,
+    required this.rotSpeed,
+    required this.scale,
+    required this.targetScale,
+    required this.opacity,
   });
 }
 
-class _ParticleCanvasPainter extends CustomPainter {
-  final List<_MascotParticle> particles;
+class _ArcadeCoinBlastPainter extends CustomPainter {
+  final List<_ArcadeCoin> coins;
 
-  _ParticleCanvasPainter({required this.particles});
+  _ArcadeCoinBlastPainter({required this.coins});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final cx = size.width / 2;
-    final cy = size.height / 2;
-
-    for (final p in particles) {
-      final alpha = (1.0 - (p.age / p.maxLife)).clamp(0.0, 1.0);
-      final paint = Paint()
-        ..color = p.color.withValues(alpha: alpha)
-        ..style = PaintingStyle.fill;
+    for (final coin in coins) {
+      if (coin.opacity <= 0 || coin.scale <= 0) continue;
 
       canvas.save();
-      canvas.translate(cx + p.x, cy + p.y);
-      canvas.rotate(p.rotation);
+      canvas.translate(coin.x, coin.y);
+      canvas.scale(coin.scale);
+      canvas.rotate(coin.rotation);
 
-      // Render as miniature gold coin or star
-      final r = Rect.fromCenter(center: Offset.zero, width: p.size, height: p.size * 0.7);
-      canvas.drawOval(r, paint);
-      canvas.drawOval(
-        r,
-        Paint()
-          ..color = Colors.white.withValues(alpha: alpha * 0.7)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 0.8,
+      final textSpan = TextSpan(
+        text: coin.emoji,
+        style: TextStyle(
+          fontSize: coin.size,
+        ),
+      );
+
+      final textPainter = TextPainter(
+        text: textSpan,
+        textDirection: TextDirection.ltr,
+      )..layout();
+
+      textPainter.paint(
+        canvas,
+        Offset(-textPainter.width / 2, -textPainter.height / 2),
       );
 
       canvas.restore();
@@ -572,7 +744,7 @@ class _ParticleCanvasPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _ParticleCanvasPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _ArcadeCoinBlastPainter oldDelegate) => true;
 }
 
 class _LivingCoinPainter extends CustomPainter {
@@ -640,7 +812,7 @@ class _LivingCoinPainter extends CustomPainter {
         ..strokeWidth = 1.2,
     );
 
-    // 3. Hands / Limbs waving
+    // 3. Limbs waving
     final double armAngle = (type == TransactionType.income)
         ? -0.5 - (idleProgress * 0.3) // hands up celebrating
         : 0.3 + (idleProgress * 0.2);

@@ -239,9 +239,12 @@ class DatabaseService {
     final db = await database;
     if (db != null) {
       final maps = await db.query('categories', orderBy: 'name ASC');
-      return maps.map((e) => Category.fromMap(e)).toList();
+      final list = maps.map((e) => Category.fromMap(e)).toList();
+      final seen = <String>{};
+      return list.where((c) => seen.add(c.id)).toList();
     }
-    return List.from(_memCategories);
+    final seen = <String>{};
+    return _memCategories.where((c) => seen.add(c.id)).toList();
   }
 
   Future<void> saveCategory(Category category) async {

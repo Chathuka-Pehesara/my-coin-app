@@ -181,25 +181,39 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
 
     final currencyInfo = CurrencyFormatter.getCurrencyInfo(state.currencyCode);
 
-    // Available categories by type
+    // Available categories by type with ID deduplication
+    final seenCategoryIds = <String>{};
     final availableCategories = state.categories.where((c) {
-      if (_selectedType == TransactionType.income) {
-        return c.type == CategoryType.income;
-      } else {
-        return c.type == CategoryType.expense;
-      }
+      final matchesType = (_selectedType == TransactionType.income)
+          ? c.type == CategoryType.income
+          : c.type == CategoryType.expense;
+      if (!matchesType) return false;
+      return seenCategoryIds.add(c.id);
     }).toList();
 
-    if (_selectedCategoryId == null && availableCategories.isNotEmpty) {
-      _selectedCategoryId = availableCategories.first.id;
+    if (_selectedCategoryId == null || !availableCategories.any((c) => c.id == _selectedCategoryId)) {
+      _selectedCategoryId = availableCategories.isNotEmpty ? availableCategories.first.id : null;
     }
 
-    if (_selectedAccountId == null && state.accounts.isNotEmpty) {
-      _selectedAccountId = state.accounts.first.id;
+    // Available accounts with ID deduplication
+    final seenAccountIds = <String>{};
+    final availableAccounts = state.accounts.where((a) => seenAccountIds.add(a.id)).toList();
+
+    if (_selectedAccountId == null || !availableAccounts.any((a) => a.id == _selectedAccountId)) {
+      _selectedAccountId = availableAccounts.isNotEmpty ? availableAccounts.first.id : null;
     }
 
-    if (_selectedType == TransactionType.transfer && _selectedToAccountId == null && state.accounts.length > 1) {
-      _selectedToAccountId = state.accounts.firstWhere((a) => a.id != _selectedAccountId).id;
+    if (_selectedType == TransactionType.transfer) {
+      if (_selectedToAccountId == null || !availableAccounts.any((a) => a.id == _selectedToAccountId)) {
+        final otherAccounts = availableAccounts.where((a) => a.id != _selectedAccountId);
+        if (otherAccounts.isNotEmpty) {
+          _selectedToAccountId = otherAccounts.first.id;
+        } else if (availableAccounts.isNotEmpty) {
+          _selectedToAccountId = availableAccounts.first.id;
+        } else {
+          _selectedToAccountId = null;
+        }
+      }
     }
 
     return Scaffold(
@@ -402,7 +416,7 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
                   value: _selectedAccountId,
                   isExpanded: true,
                   dropdownColor: isDark ? AppColors.darkSurface : Colors.white,
-                  items: state.accounts.map((a) {
+                  items: availableAccounts.map((a) {
                     return DropdownMenuItem<String>(
                       value: a.id,
                       child: Row(
@@ -463,7 +477,7 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
                     value: _selectedToAccountId,
                     isExpanded: true,
                     dropdownColor: isDark ? AppColors.darkSurface : Colors.white,
-                    items: state.accounts.map((a) {
+                    items: availableAccounts.map((a) {
                       return DropdownMenuItem<String>(
                         value: a.id,
                         child: Row(

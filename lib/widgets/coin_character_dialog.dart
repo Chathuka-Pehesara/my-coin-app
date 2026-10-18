@@ -74,6 +74,7 @@ class _CoinCharacterReactionModalState extends State<CoinCharacterReactionModal>
   int _pokeCount = 0;
   late String _mascotSpeech;
   bool _isAbsorbing = false;
+  bool _isClosed = false;
   Offset _absorptionTarget = const Offset(200, 120);
 
   @override
@@ -200,25 +201,22 @@ class _CoinCharacterReactionModalState extends State<CoinCharacterReactionModal>
         final coin = _arcadeCoins[i];
 
         if (_isAbsorbing) {
-          // Vacuum Absorption: curve towards absorption target
+          // Vacuum Absorption: smoothly pull directly towards absorption target
           final dx = _absorptionTarget.dx - coin.x;
           final dy = _absorptionTarget.dy - coin.y;
           final dist = sqrt(dx * dx + dy * dy);
 
-          if (dist < 28) {
+          if (dist < 42 || coin.scale <= 0.1 || coin.opacity <= 0.08) {
             // Absorbed into vault!
             _arcadeCoins.removeAt(i);
             continue;
           }
 
-          final pullStrength = 1800.0;
-          coin.vx += (dx / dist) * pullStrength * dt;
-          coin.vy += (dy / dist) * pullStrength * dt;
-          coin.x += coin.vx * dt;
-          coin.y += coin.vy * dt;
-          coin.rotation += coin.rotSpeed * dt * 3;
-          coin.scale = (coin.scale - 0.035).clamp(0.05, 1.5);
-          coin.opacity = (coin.opacity - 0.02).clamp(0.0, 1.0);
+          coin.x += dx * 0.22;
+          coin.y += dy * 0.22;
+          coin.scale = (coin.scale * 0.86).clamp(0.0, 1.5);
+          coin.opacity = (coin.opacity * 0.86).clamp(0.0, 1.0);
+          coin.rotation += coin.rotSpeed * dt * 2;
         } else {
           // Standard Arcade physics with gravity and bounce
           coin.vy += 650.0 * dt; // gravity
@@ -257,7 +255,10 @@ class _CoinCharacterReactionModalState extends State<CoinCharacterReactionModal>
   }
 
   void _startVacuumAbsorption() {
-    if (_isAbsorbing) return;
+    if (_isAbsorbing) {
+      _finishAndClose();
+      return;
+    }
     _isAbsorbing = true;
     _autoDismissTimer?.cancel();
     _progressTimer?.cancel();
@@ -269,11 +270,21 @@ class _CoinCharacterReactionModalState extends State<CoinCharacterReactionModal>
     setState(() {
       _mascotSpeech = 'Absorbing wealth into the vault! 🚀✨';
     });
+
+    // Hard fallback: force close after 550ms so user is never stuck
+    Timer(const Duration(milliseconds: 550), () {
+      _finishAndClose();
+    });
   }
 
   void _finishAndClose() {
+    if (_isClosed) return;
+    _isClosed = true;
+    _physicsTimer?.cancel();
+    _autoDismissTimer?.cancel();
+    _progressTimer?.cancel();
     if (mounted) {
-      Navigator.of(context).pop();
+      Navigator.of(context, rootNavigator: true).pop();
       widget.onDismissed?.call();
     }
   }
@@ -361,7 +372,13 @@ class _CoinCharacterReactionModalState extends State<CoinCharacterReactionModal>
         children: [
           // Background Tap dismiss/absorb layer
           GestureDetector(
-            onTap: _startVacuumAbsorption,
+            onTap: () {
+              if (_isAbsorbing) {
+                _finishAndClose();
+              } else {
+                _startVacuumAbsorption();
+              }
+            },
             behavior: HitTestBehavior.opaque,
             child: const SizedBox.expand(),
           ),
@@ -374,46 +391,55 @@ class _CoinCharacterReactionModalState extends State<CoinCharacterReactionModal>
             ),
           ),
 
-          // Top Vacuum Target Glow Pill
+          // Top Vacuum Target Glow Pill (Tap to close immediately)
           Positioned(
             top: 50,
             left: 24,
             right: 24,
             child: Center(
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 300),
-                opacity: _isAbsorbing ? 1.0 : 0.85,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: (isDark ? AppColors.darkSurfaceElevated : Colors.white)
-                        .withValues(alpha: 0.92),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(
-                      color: _isAbsorbing ? AppColors.goldPrimary : AppColors.cardBorder,
-                      width: _isAbsorbing ? 2 : 1,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.goldPrimary.withValues(alpha: _isAbsorbing ? 0.4 : 0.15),
-                        blurRadius: _isAbsorbing ? 18 : 8,
+              child: GestureDetector(
+                onTap: _finishAndClose,
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 300),
+                  opacity: _isAbsorbing ? 1.0 : 0.9,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: (isDark ? AppColors.darkSurfaceElevated : Colors.white)
+                          .withValues(alpha: 0.94),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: _isAbsorbing ? AppColors.goldPrimary : AppColors.cardBorder,
+                        width: _isAbsorbing ? 2 : 1,
                       ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('🪙', style: TextStyle(fontSize: 16)),
-                      const SizedBox(width: 8),
-                      Text(
-                        _isAbsorbing ? 'Collecting Coins...' : 'Tap anywhere to Collect ✨',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.goldPrimary.withValues(alpha: _isAbsorbing ? 0.4 : 0.15),
+                          blurRadius: _isAbsorbing ? 18 : 8,
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('🪙', style: TextStyle(fontSize: 16)),
+                        const SizedBox(width: 8),
+                        Text(
+                          _isAbsorbing ? 'Coins Collected! Tap to Close ✓' : 'Tap to Collect & Close ✨',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Icon(
+                          Icons.close_rounded,
+                          size: 15,
+                          color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -442,17 +468,20 @@ class _CoinCharacterReactionModalState extends State<CoinCharacterReactionModal>
                   ),
                 ],
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+              child: Stack(
+                clipBehavior: Clip.none,
                 children: [
-                  // Dismiss progress bar indicator
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(3),
-                    child: SizedBox(
-                      height: 4,
-                      width: 54,
-                      child: LinearProgressIndicator(
-                        value: _dismissProgress,
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Dismiss progress bar indicator
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(3),
+                        child: SizedBox(
+                          height: 4,
+                          width: 54,
+                          child: LinearProgressIndicator(
+                            value: _dismissProgress,
                         backgroundColor: isDark ? AppColors.darkBorder : AppColors.goldSubtle,
                         valueColor: AlwaysStoppedAnimation<Color>(
                           _dismissProgress > 0.3 ? AppColors.goldPrimary : AppColors.expenseCoral,
@@ -659,11 +688,20 @@ class _CoinCharacterReactionModalState extends State<CoinCharacterReactionModal>
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                             elevation: 1,
                           ),
-                          onPressed: _startVacuumAbsorption,
-                          icon: const Icon(Icons.auto_awesome_rounded, size: 16),
-                          label: const Text(
-                            'Collect Coins ✨',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          onPressed: () {
+                            if (_isAbsorbing) {
+                              _finishAndClose();
+                            } else {
+                              _startVacuumAbsorption();
+                            }
+                          },
+                          icon: Icon(
+                            _isAbsorbing ? Icons.check_circle_outline_rounded : Icons.auto_awesome_rounded,
+                            size: 16,
+                          ),
+                          label: Text(
+                            _isAbsorbing ? 'Done ✓' : 'Collect Coins ✨',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                           ),
                         ),
                       ),
@@ -671,8 +709,45 @@ class _CoinCharacterReactionModalState extends State<CoinCharacterReactionModal>
                   ),
                 ],
               ),
-            ),
+
+              // Close 'X' Button on top-right of card
+              Positioned(
+                top: -6,
+                right: -6,
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: _finishAndClose,
+                    child: Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.darkSurfaceElevated : AppColors.goldSubtle.withValues(alpha: 0.9),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isDark ? AppColors.darkBorder : AppColors.cardBorder,
+                          width: 1,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 4,
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        Icons.close_rounded,
+                        size: 18,
+                        color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
+        ),
+      ),
         ],
       ),
     );
